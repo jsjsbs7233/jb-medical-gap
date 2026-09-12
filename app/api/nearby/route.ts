@@ -84,7 +84,16 @@ async function writeCache(grid: string, clinicId: string, totalTime: number, tot
     await supabase
       .from('traffic_cache')
       .upsert(
-        { grid_key: grid, clinic_id: clinicId, total_time: totalTime, total_dist: totalDist },
+        {
+          grid_key: grid,
+          clinic_id: clinicId,
+          total_time: totalTime,
+          total_dist: totalDist,
+          // created_at은 insert에만 default now()가 적용되고, 이미 있는 행을 upsert로
+          // 갱신할 땐 명시적으로 안 넣으면 안 바뀐다 — "신선도" 체크가 영원히 오래됨으로
+          // 판정돼서 매번 Tmap을 다시 부르게 되는 버그가 있었다. 매번 명시적으로 갱신한다.
+          created_at: new Date().toISOString(),
+        },
         { onConflict: 'grid_key,clinic_id' }
       );
     return;
