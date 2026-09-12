@@ -19,12 +19,31 @@
 //   좋은 수준이라 이 편이 더 안전하다.
 
 const BASE = 'https://apis.data.go.kr/B552657/ErmctInfoInqireService/getSrsillDissAceptncPosblInfoInqire';
+const BEDS_BASE = 'https://apis.data.go.kr/B552657/ErmctInfoInqireService/getEmrrmRltmUsefulSckbdInfoInqire';
 
 export interface SevereIllnessAcceptance {
   name: string; // dutyName
   hpid: string;
   // MKioskTy1~28 원본 그대로. 값은 보통 'Y'(가능) / '불가능' / '정보미제공' 중 하나.
   capabilities: Record<string, string>;
+}
+
+export interface ErBedStatus {
+  name: string; // dutyName
+  hpid: string;
+  availableBeds: number; // hvec — 응급실 가용 병상수. 음수면 정원 초과(대기)로 해석됨
+  updatedAt: string | null; // hvidate(YYYYMMDDHHMMSS)를 ISO 비슷한 문자열로 변환
+}
+
+function parseHvidate(raw: unknown): string | null {
+  const s = String(raw ?? '');
+  if (!/^\d{14}$/.test(s)) return null;
+  const y = s.slice(0, 4);
+  const mo = s.slice(4, 6);
+  const d = s.slice(6, 8);
+  const h = s.slice(8, 10);
+  const mi = s.slice(10, 12);
+  return `${y}-${mo}-${d} ${h}:${mi}`;
 }
 
 function normalizeItems(json: unknown): Record<string, unknown>[] {
@@ -72,6 +91,46 @@ export async function fetchSevereIllnessAcceptance(sido: string): Promise<Severe
         capabilities,
       };
     });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 시도 기준 응급실 실시간 가용 병상 수를 가져온다 (hvec 필드).
+ * ⚠ hvec 하나만 신뢰해서 쓴다 — hvs01~hvs61 등 세부 병상 코드는 공식 코드표를
+ *   못 구해서 화면에 노출하지 않는다. "총 병상수" 짝 필드가 이 응답에 없어서
+ *   "총원 대비 현재 수용"은 못 보여주고, "지금 바로 쓸 수 있는 병상 수"만 보여준다.
+ * 실패해도 절대 throw하지 않는다 — 빈 배열을 반환하고 화면은 계속 정상 동작한다.
+ */
+export async function fetchErRealtimeBeds(sido: string): Promise<ErBedStatus[]> {
+  const key = process.env.DATA_GO_KR_ERMCT_KEY;
+  if (!key || !sido) return [];
+
+  try {
+    const qs = new URLSearchParams({
+      serviceKey: key,
+      STAGE1: sido,
+      pageNo: '1',
+      numOfRows: '100',
+      _type: 'json',
+    });
+
+    const res = await fetch(`${BEDS_BASE}?${qs.toString()}`, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    const header = (json as { response?: { header?: { resultCode?: string } } })?.response?.header;
+    if (header?.resultCode !== '00') return [];
+
+    return normalizeItems(json)
+      .filter((it) => it.hvec !== undefined)
+      .map((it) => ({
+        name: String(it.dutyName ?? ''),
+        hpid: String(it.hpid ?? ''),
+        availableBeds: Number(it.hvec ?? 0),
+        updatedAt: parseHvidate(it.hvidate),
+      }));
   } catch {
     return [];
   }

@@ -17,14 +17,25 @@ export function pickNearestSpecialist(hospitals: HospitalCareInfo[]): HospitalCa
   return [...candidates].sort((a, b) => a.travelTime - b.travelTime)[0];
 }
 
-/** 지도 마커/목록 필터링 — "전체 / 소아 진료 가능 / 전문의 진료" */
+/** 지도 마커/목록 필터링 — "전체 / 소아 진료 가능 / 전문의 진료 / 응급실" */
 export function filterByCareType(
   hospitals: HospitalCareInfo[],
   filter: CareFilter
 ): HospitalCareInfo[] {
   if (filter === 'general') return hospitals.filter((h) => h.acceptsPediatricPatients);
   if (filter === 'specialist') return hospitals.filter((h) => h.hasPediatricSpecialist);
+  if (filter === 'emergency') return hospitals.filter((h) => h.hasEmergencyRoom);
   return hospitals;
+}
+
+/** "응급실" 필터일 때 좌측 패널 상단에 보여줄 합계 요약. */
+export function summarizeEmergencyBeds(hospitals: HospitalCareInfo[]): {
+  hospitalCount: number;
+  totalAvailableBeds: number;
+} {
+  const withEr = hospitals.filter((h) => h.hasEmergencyRoom);
+  const totalAvailableBeds = withEr.reduce((sum, h) => sum + Math.max(0, h.erAvailableBeds ?? 0), 0);
+  return { hospitalCount: withEr.length, totalAvailableBeds };
 }
 
 /**

@@ -38,10 +38,16 @@ export interface HospitalCareInfo {
   // 병원 "전체"의 전문의 총원(과목 구분 없음, 심평원 mdeptSdrCnt). 값이 있을 때만 표시.
   specialistDoctorCount?: number;
 
+  // 국립중앙의료원 응급의료기관 데이터(hpid 기준)와 병원명으로 매칭한 결과라
+  // 완전히 정확하진 않다(다른 기관 ID 체계). 매칭 안 되면 undefined로 남는다.
+  hasEmergencyRoom?: boolean;
+  erAvailableBeds?: number; // 지금 바로 쓸 수 있는 응급실 병상 수 (음수=정원 초과)
+  erUpdatedAt?: string | null; // 이 병상 정보가 언제 기준인지("YYYY-MM-DD HH:mm")
+
   isNightClinic: boolean;
   isHolidayClinic: boolean;
 
   recommendationReason: string | null;
 }
 
-export type CareFilter = 'all' | 'general' | 'specialist';
+export type CareFilter = 'all' | 'general' | 'specialist' | 'emergency';

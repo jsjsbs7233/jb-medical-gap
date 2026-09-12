@@ -49,6 +49,11 @@ export default function HospitalListItem({ hospital, isSelected, onDetail, onDir
             병원 전체 전문의 {hospital.specialistDoctorCount}명
           </span>
         )}
+        {hospital.hasEmergencyRoom && (
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
+            🚑 응급실 가용병상 {hospital.erAvailableBeds}
+          </span>
+        )}
       </div>
 
       <div className="mt-2.5 flex gap-2 pl-3.5">

@@ -86,6 +86,12 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
             병원 전체 전문의 {hospital.specialistDoctorCount}명
           </span>
         )}
+        {hospital.hasEmergencyRoom && (
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+            🚑 응급실 가용병상 {hospital.erAvailableBeds}
+            {hospital.erUpdatedAt ? ` (${hospital.erUpdatedAt.slice(11)} 기준)` : ''}
+          </span>
+        )}
       </div>
 
       {equipment.length > 0 && (
