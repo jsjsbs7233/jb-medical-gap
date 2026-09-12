@@ -27,6 +27,7 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const [filter, setFilter] = useState<CareFilter>('all');
+  const [radiusKm, setRadiusKm] = useState(100);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(true);
@@ -52,7 +53,7 @@ export default function Home() {
       if (!cancelled) setLoading(true);
     });
 
-    fetch(`/api/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`)
+    fetch(`/api/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=${radiusKm}`)
       .then((res) => (res.ok ? (res.json() as Promise<NearbyResponse>) : Promise.reject(res.status)))
       .then(async (data) => {
         if (cancelled) return;
@@ -99,7 +100,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [userLocation]);
+  }, [userLocation, radiusKm]);
 
   const nearestGeneral = useMemo(() => pickNearestAccepting(hospitals), [hospitals]);
   const nearestSpecialist = useMemo(() => pickNearestSpecialist(hospitals), [hospitals]);
@@ -167,6 +168,8 @@ export default function Home() {
         locationLabel={loading ? '위치 확인 중...' : `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`}
         filter={filter}
         onFilterChange={setFilter}
+        radiusKm={radiusKm}
+        onRadiusChange={setRadiusKm}
         nearestGeneral={nearestGeneral}
         nearestSpecialist={nearestSpecialist}
         hospitals={listHospitals}

@@ -4,7 +4,8 @@
  * 자동 대체하고, 소아 진료 가능/소아청소년과 전문의를 구분해서 내려준다.
  *
  * ① 심평원 목록은 Supabase에서 읽는다 (없으면 직접 호출로 대체) — Tmap 호출 0회
- * ② bounding box + 직선거리로 반경 60km 내 가까운 8개 + 전문의 병원 최대 3개를 더한다
+ * ② bounding box + 직선거리로 반경(50/100/200km, 사용자 선택) 내 가까운 8개 +
+ *    전문의 병원 최대 3개를 더한다 — 반경이 커져도 이 개수는 그대로다
  * ③ 위치를 격자로 스냅해 캐시가 있으면 그대로 쓴다(Supabase 있으면 DB, 없으면 서버 메모리)
  * ④ 캐시에 없는 후보만 Tmap 병렬 호출
  */
@@ -12,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRoute } from '@/lib/tmap';
 import { fetchAround } from '@/lib/hira';
 import { supabaseServer, type ClinicRow } from '@/lib/supabase';
-import { CANDIDATES, RADIUS_KM, CACHE_SEC, haversineKm, toGridKey, boundingBox } from '@/lib/geo';
+import { CANDIDATES, CACHE_SEC, haversineKm, toGridKey, boundingBox } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
 import {
   isPediatricSpecialistInstitution,
@@ -26,15 +27,20 @@ import demoFixtures from '@/lib/demoFixtures.json';
 const SPECIALIST_CANDIDATES = 3; // 거리순 8개 안에 전문의 병원이 없을 수 있어 추가로 확보
 const FALLBACK_KMH = 45; // Tmap이 죽었을 때 직선거리를 시간으로 환산하는 가정 속도
 
+// 사용자가 화면에서 고를 수 있는 검색 반경(km). CLAUDE.md의 원래 60km 대신
+// 사용자가 직접 넓히거나 좁힐 수 있게 했다 — 기본값은 셋 중 중간인 100km.
+const ALLOWED_RADIUS_KM = [50, 100, 200] as const;
+const DEFAULT_RADIUS_KM = 100;
+
 // Supabase가 아직 설정되지 않았을 때를 위한 인메모리 폴백 캐시 (같은 서버 인스턴스 안에서만 유효)
 const memCache = new Map<string, { totalTime: number; totalDist: number; ts: number }>();
 
-async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
+async function loadBaseClinics(lat: number, lng: number, radiusKm: number): Promise<ClinicRow[]> {
   const supabase = supabaseServer();
 
   if (supabase) {
     // bounding box로 먼저 좁혀서 DB가 커져도 매 요청 전체 스캔을 피한다
-    const box = boundingBox({ lat, lng }, RADIUS_KM);
+    const box = boundingBox({ lat, lng }, radiusKm);
     const { data, error } = await supabase
       .from('clinics')
       .select('id, name, sido, sigungu, addr, tel, lat, lng, cl_name, specialist_doctor_count')
@@ -46,7 +52,7 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
   }
 
   // Supabase 미설정이거나 아직 /api/sync를 안 돌렸을 때 — 심평원 직접 호출로 대체
-  const hira = await fetchAround({ lat, lng }, RADIUS_KM * 1000);
+  const hira = await fetchAround({ lat, lng }, radiusKm * 1000);
   return hira.map((h) => ({
     id: h.id,
     name: h.name,
@@ -99,13 +105,14 @@ async function writeCache(grid: string, clinicId: string, totalTime: number, tot
 
 /**
  * 주변 소아과 목록.
- * GET /api/nearby?lat=&lng=
+ * GET /api/nearby?lat=&lng=&radiusKm= (radiusKm 생략 시 100, 허용값: 50/100/200)
  *
  * 무슨 일이 있어도 500을 던지지 않는다 — 실패하면 200 + 빈 배열/추정치.
  */
 export async function GET(req: NextRequest) {
   const latParam = req.nextUrl.searchParams.get('lat');
   const lngParam = req.nextUrl.searchParams.get('lng');
+  const radiusParam = req.nextUrl.searchParams.get('radiusKm');
 
   // Number(null) === 0 이라 누락된 것과 진짜 0,0을 구분하려면 null 체크를 먼저 해야 한다
   if (latParam === null || lngParam === null) {
@@ -119,6 +126,13 @@ export async function GET(req: NextRequest) {
     return empty('lat, lng 값이 올바르지 않습니다.');
   }
 
+  // 화면에서 고를 수 있는 값(50/100/200)이 아니면 조용히 기본값으로 대체한다 —
+  // 임의로 큰 값을 넣어서 반경을 무제한으로 늘리는 것을 막는다.
+  const radiusNum = Number(radiusParam);
+  const radiusKm = (ALLOWED_RADIUS_KM as readonly number[]).includes(radiusNum)
+    ? radiusNum
+    : DEFAULT_RADIUS_KM;
+
   const grid = toGridKey(lat, lng);
 
   // 최후의 보험(CLAUDE.md §7) — DB/Tmap을 아예 건드리지 않고 미리 검증해둔 고정 응답을 낸다.
@@ -128,11 +142,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const base = await loadBaseClinics(lat, lng);
+    const base = await loadBaseClinics(lat, lng, radiusKm);
 
     const scored = base
       .map((c) => ({ ...c, distanceKm: haversineKm({ lat, lng }, { lat: c.lat, lng: c.lng }) }))
-      .filter((c) => c.distanceKm <= RADIUS_KM)
+      .filter((c) => c.distanceKm <= radiusKm)
       // dgsbjtCd=11로 걸러졌어도 상호가 정형외과·이비인후과 등 소아과와 무관한
       // 전문과목이면 제외한다 (실제 심평원 데이터에 이런 경우가 섞여 있음)
       .filter((c) => isRelevantForPediatricCare(c.cl_name ?? '', c.name))
@@ -154,7 +168,7 @@ export async function GET(req: NextRequest) {
         items: [],
         gridKey: grid,
         cached: true,
-        error: `반경 ${RADIUS_KM}km 내 소아과가 없습니다`,
+        error: `반경 ${radiusKm}km 내 소아과가 없습니다`,
       });
     }
 
