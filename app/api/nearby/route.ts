@@ -107,7 +107,8 @@ export async function GET(req: NextRequest) {
         needsFetch.map((c) => getRoute({ lat, lng }, { lat: c.lat, lng: c.lng })),
       );
 
-      const toUpsert: { grid_key: string; clinic_id: string; total_time: number; total_dist: number }[] = [];
+      const toUpsert: { grid_key: string; clinic_id: string; total_time: number; total_dist: number; created_at: string }[] = [];
+      const now = new Date().toISOString();
 
       results.forEach((r, i) => {
         const clinic = needsFetch[i];
@@ -118,6 +119,9 @@ export async function GET(req: NextRequest) {
             clinic_id: clinic.id,
             total_time: r.value.totalTime,
             total_dist: r.value.totalDistance,
+            // created_at은 insert에만 default now()가 적용되고 upsert의 update 경로에서는
+            // 안 건드려지면 갱신이 안 된다 — 매번 명시적으로 넣어서 "신선도"를 실제로 갱신한다
+            created_at: now,
           });
         }
         // 실패(null 또는 reject)한 건은 cacheMap에 안 남긴다 → 아래에서 직선거리 추정으로 대체
