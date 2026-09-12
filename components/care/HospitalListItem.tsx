@@ -44,6 +44,11 @@ export default function HospitalListItem({ hospital, isSelected, onDetail, onDir
         >
           {hospital.hasPediatricSpecialist ? '소아청소년과 전문의' : '소아 진료 가능(일반의)'}
         </span>
+        {!!hospital.specialistDoctorCount && (
+          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+            병원 전체 전문의 {hospital.specialistDoctorCount}명
+          </span>
+        )}
       </div>
 
       <div className="mt-2.5 flex gap-2 pl-3.5">

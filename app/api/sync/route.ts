@@ -71,6 +71,7 @@ export async function POST() {
     lat: c.lat,
     lng: c.lng,
     cl_name: c.clName || null, // "진짜 소아청소년과 전문의" 추정(lib/pediatricSpecialist.ts)에 필요
+    specialist_doctor_count: c.specialistDoctorCount,
   }));
 
   const { error } = await supabase.from('clinics').upsert(rows, { onConflict: 'id' });

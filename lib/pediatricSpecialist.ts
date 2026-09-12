@@ -18,6 +18,10 @@
 //
 // ⚠ getDgsbjtInfo 승인이 나면 이 함수를 실제 전문의 수 데이터로 교체해야 한다.
 //
+// 보조 신호: getHospBasisList 응답에 mdeptSdrCnt(그 병원 "전체"의 전문의 총원,
+// 과목 구분 없음)가 같이 온다. 과목별 숫자는 아니지만, "병원급인데 전문의가
+// 0명"이면 실제로는 전문의가 없다고 보는 안전장치 정도로만 쓴다.
+//
 // 추가 문제: dgsbjtCd=11 필터를 실제로 호출해보면 "마디정형외과의원",
 // "강초희유외과의원", "고려마취통증의학과의원" 같은, 상식적으로 아이를 데려갈 일이
 // 없는 병원까지 걸려 나온다 — 코드 오류가 아니라, 이런 의원들도 진료과목을
@@ -33,9 +37,18 @@ const PEDIATRIC_NAME_PATTERN = /소아청소년과|소아과/;
 const NON_PEDIATRIC_SPECIALTY_PATTERN =
   /외과|이비인후과|마취통증의학과|비뇨의학과|비뇨기과|피부과|안과|산부인과|여성의원|여성병원|치과|한의원|한방|영상의학과|병리과|진단검사의학과|방사선종양학과|핵의학과|정신건강의학과|신경정신과/;
 
-export function isPediatricSpecialistInstitution(clName: string, name: string): boolean {
-  if (HOSPITAL_GRADE_NAMES.has(clName)) return true;
-  return PEDIATRIC_NAME_PATTERN.test(name);
+export function isPediatricSpecialistInstitution(
+  clName: string,
+  name: string,
+  specialistDoctorCount?: number
+): boolean {
+  if (PEDIATRIC_NAME_PATTERN.test(name)) return true;
+  if (HOSPITAL_GRADE_NAMES.has(clName)) {
+    // 병원급인데 전문의가 아예 0명으로 나오면, 등급만 보고 전문의가 있다고 하기 어렵다
+    if (typeof specialistDoctorCount === 'number' && specialistDoctorCount === 0) return false;
+    return true;
+  }
+  return false;
 }
 
 /** dgsbjtCd=11로 걸러졌더라도, 상호가 소아과와 무관한 전문과목이면 후보에서 뺀다. */

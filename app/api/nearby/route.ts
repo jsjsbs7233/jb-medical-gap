@@ -21,7 +21,7 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
   if (supabase) {
     const { data, error } = await supabase
       .from('clinics')
-      .select('id, name, sido, sigungu, addr, tel, lat, lng, cl_name');
+      .select('id, name, sido, sigungu, addr, tel, lat, lng, cl_name, specialist_doctor_count');
     if (!error && data && data.length > 0) return data as ClinicRow[];
   }
 
@@ -37,6 +37,7 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
     lat: h.lat,
     lng: h.lng,
     cl_name: h.clName,
+    specialist_doctor_count: h.specialistDoctorCount,
   }));
 }
 
@@ -123,7 +124,9 @@ export async function GET(req: NextRequest) {
     // 거리순 후보 안에 전문의 병원이 없을 수 있어(일반의 GP 의원이 훨씬 많음),
     // "가장 가까운 소아 전문진료"가 항상 실제 이동시간을 갖도록 별도로 확보한다.
     const nearestSpecialists = scored
-      .filter((c) => isPediatricSpecialistInstitution(c.cl_name ?? '', c.name))
+      .filter((c) =>
+        isPediatricSpecialistInstitution(c.cl_name ?? '', c.name, c.specialist_doctor_count ?? undefined)
+      )
       .slice(0, SPECIALIST_CANDIDATES);
 
     const merged = new Map<string, (typeof scored)[number]>();
@@ -191,7 +194,12 @@ export async function GET(req: NextRequest) {
       estimated: r.estimated,
       // dgsbjtCd=11(소아청소년과)로 이미 걸러진 후보라 전부 소아 진료는 가능하다고 본다.
       acceptsPediatricPatients: true,
-      hasPediatricSpecialist: isPediatricSpecialistInstitution(r.clinic.cl_name ?? '', r.clinic.name),
+      hasPediatricSpecialist: isPediatricSpecialistInstitution(
+        r.clinic.cl_name ?? '',
+        r.clinic.name,
+        r.clinic.specialist_doctor_count ?? undefined
+      ),
+      specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
     }));
 
     items.sort((a, b) => a.minutes - b.minutes);

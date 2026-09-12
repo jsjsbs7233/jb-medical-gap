@@ -25,6 +25,9 @@ export interface Clinic {
   // 추정해서 채운다 (lib/pediatricSpecialist.ts 참고) — 심평원 상세 API 승인 전까지의 추정치.
   acceptsPediatricPatients?: boolean;
   hasPediatricSpecialist?: boolean;
+
+  // 병원 "전체"의 전문의 총원(과목 구분 없음, 심평원 mdeptSdrCnt). 선택 필드.
+  specialistDoctorCount?: number;
 }
 
 export interface NearbyResponse {

@@ -14,6 +14,7 @@ export interface RawClinic {
   tel: string | null;
   lat: number;
   lng: number;
+  specialistDoctorCount: number; // mdeptSdrCnt(의과 전문의 총원) — 병원 전체 기준, 과목별 구분 아님
 }
 
 /** 한 페이지 조회 */
@@ -51,6 +52,7 @@ async function fetchPage(center: { lat: number; lng: number }, radiusM: number, 
       tel: it.telno ? String(it.telno) : null,
       lng: Number(it.XPos),   // X = 경도
       lat: Number(it.YPos),   // Y = 위도
+      specialistDoctorCount: Number(it.mdeptSdrCnt ?? 0),
     }));
 
   return { items, totalCount: Number(body?.totalCount ?? 0) };

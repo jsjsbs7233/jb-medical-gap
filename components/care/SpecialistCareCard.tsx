@@ -46,6 +46,11 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
             🕙 {hospital.closeTime} 진료 종료
           </span>
         )}
+        {!!hospital.specialistDoctorCount && (
+          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
+            병원 전체 전문의 {hospital.specialistDoctorCount}명
+          </span>
+        )}
       </div>
 
       {hospital.recommendationReason && (

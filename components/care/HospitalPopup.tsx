@@ -47,6 +47,11 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
         >
           {hospital.hasPediatricSpecialist ? '✓' : '—'} 소아청소년과 전문의
         </span>
+        {!!hospital.specialistDoctorCount && (
+          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
+            병원 전체 전문의 {hospital.specialistDoctorCount}명
+          </span>
+        )}
       </div>
 
       <div className="mt-3 flex gap-2">
