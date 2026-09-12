@@ -30,6 +30,7 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(true);
+  const [placeName, setPlaceName] = useState<string | null>(null);
 
   // 위치 권한 요청, 실패하면 전주 좌표로 폴백.
   // URL에 ?lat=&lng=가 있으면 GPS보다 우선한다 — 발표장에서 GPS를 켜면 발표장
@@ -57,6 +58,29 @@ export default function Home() {
       { timeout: 5000 }
     );
   }, []);
+
+  // 현재 위치를 "전북대학교"처럼 사람이 읽을 수 있는 이름으로 바꾼다.
+  // 실패하면 placeName이 null로 남고, 화면은 좌표 숫자로 대체해서 계속 정상 동작한다.
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setPlaceName(null);
+    });
+
+    fetch(`/api/reverse-geocode?lat=${userLocation.lat}&lng=${userLocation.lng}`)
+      .then((res) => (res.ok ? res.json() : { label: null }))
+      .then((data) => {
+        if (!cancelled) setPlaceName(data.label ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setPlaceName(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
 
   // 주변 소아과 목록: /api/nearby 우선 시도, 실패하면 목업으로 화면을 계속 채운다
   useEffect(() => {
@@ -178,7 +202,11 @@ export default function Home() {
       />
 
       <RecommendationPanel
-        locationLabel={loading ? '위치 확인 중...' : `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`}
+        locationLabel={
+          loading
+            ? '위치 확인 중...'
+            : (placeName ?? `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`)
+        }
         filter={filter}
         onFilterChange={setFilter}
         nearestSpecialist={nearestSpecialist}
