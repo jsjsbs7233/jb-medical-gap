@@ -7,7 +7,6 @@
  * ② bounding box + 직선거리로 반경 60km 내 가까운 8개 + 전문의 병원 최대 3개를 더한다
  * ③ 위치를 격자로 스냅해 캐시가 있으면 그대로 쓴다(Supabase 있으면 DB, 없으면 서버 메모리)
  * ④ 캐시에 없는 후보만 Tmap 병렬 호출
- * ⑤ 지금(KST) 휴진인 곳은 등급 계산 전에 제외한다 (getDtlInfo2.8 요일별 진료시간)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoute } from '@/lib/tmap';
@@ -21,7 +20,6 @@ import {
   isRelevantForPediatricCare,
 } from '@/lib/pediatricSpecialist';
 import { fetchPediatricSpecialistCount } from '@/lib/hiraDeptSpecialist';
-import { fetchOperatingHours, getOpenStatus } from '@/lib/hiraOperatingHours';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
@@ -144,9 +142,6 @@ export async function GET(req: NextRequest) {
     const scored = base
       .map((c) => ({ ...c, distanceKm: haversineKm({ lat, lng }, { lat: c.lat, lng: c.lng }) }))
       .filter((c) => c.distanceKm <= RADIUS_KM)
-      // dgsbjtCd=11로 걸러졌어도 상호가 정형외과·이비인후과 등 소아과와 무관한
-      // 전문과목이면 제외한다 (실제 심평원 데이터에 이런 경우가 섞여 있음)
-      .filter((c) => isRelevantForPediatricCare(c.cl_name ?? '', c.name))
       .sort((a, b) => a.distanceKm - b.distanceKm);
 
     const nearestOverall = scored.slice(0, CANDIDATES);
@@ -173,16 +168,12 @@ export async function GET(req: NextRequest) {
 
     const results = await Promise.all(
       withDistance.map(async (c) => {
-        // 소아청소년과 전문의 정확한 인원수 + 요일별 진료시간(휴진 판정용) —
-        // 이동시간 계산과 동시에 병렬로 조회한다. 진료시간 정보가 없는 병원은
-        // 'unknown'으로 남긴다 — "확인된 휴진"만 걸러내고, "정보 없음"은 목록엔
-        // 남기되 "진료 가능" 배지는 안 붙인다(§1 진료시간 필터, 팀 합의로 적용).
-        const [hit, pediatricSpecialistCount, hours] = await Promise.all([
+        // 소아청소년과 전문의 정확한 인원수 — 이동시간 계산과 동시에 병렬로 조회한다.
+        // 실패(null)하면 아래에서 기존 추정 로직으로 대체한다.
+        const [hit, pediatricSpecialistCount] = await Promise.all([
           readCache(grid, c.id),
           fetchPediatricSpecialistCount(c.id),
-          fetchOperatingHours(c.id),
         ]);
-        const openStatus = getOpenStatus(hours);
 
         if (hit) {
           return {
@@ -191,7 +182,6 @@ export async function GET(req: NextRequest) {
             totalDist: hit.totalDist,
             estimated: false,
             pediatricSpecialistCount,
-            openStatus,
           };
         }
 
@@ -206,7 +196,6 @@ export async function GET(req: NextRequest) {
             totalDist: route.totalDistance,
             estimated: false,
             pediatricSpecialistCount,
-            openStatus,
           };
         }
 
@@ -217,28 +206,14 @@ export async function GET(req: NextRequest) {
           totalDist: c.distanceKm * 1000,
           estimated: true,
           pediatricSpecialistCount,
-          openStatus,
         };
       })
     );
 
-    // 확인된 휴진("closed")만 등급 계산 전에 제외한다. "unknown"(정보 없음)은
-    // 남긴다 — 등급은 "실제로 화면에 보여줄 후보들" 안에서의 상대 순위여야 한다.
-    const openResults = results.filter((r) => r.openStatus !== 'closed');
-
-    if (openResults.length === 0) {
-      return NextResponse.json<NearbyResponse>({
-        items: [],
-        gridKey: grid,
-        cached: allFromCache,
-        error: '지금 진료 중인 소아과가 반경 안에 없습니다',
-      });
-    }
-
-    const minutesList = openResults.map((r) => Math.max(1, Math.round(r.totalTime / 60)));
+    const minutesList = results.map((r) => Math.max(1, Math.round(r.totalTime / 60)));
     const grades = gradeByRank(minutesList);
 
-    const items: Clinic[] = openResults.map((r, i) => ({
+    const items: Clinic[] = results.map((r, i) => ({
       id: r.clinic.id,
       name: r.clinic.name,
       addr: r.clinic.addr,
@@ -252,8 +227,11 @@ export async function GET(req: NextRequest) {
       delay: r.estimated ? 1 : Math.round(delayRatio(r.totalTime, r.totalDist) * 100) / 100,
       grade: grades[i],
       estimated: r.estimated,
-      // dgsbjtCd=11(소아청소년과)로 이미 걸러진 후보라 전부 소아 진료는 가능하다고 본다.
-      acceptsPediatricPatients: true,
+      // dgsbjtCd=11(소아청소년과)로 걸러진 후보지만, 정형외과·이비인후과 등 상호가
+      // 소아과와 무관한 전문과목이면 "소아 진료 가능"으로 보지 않는다. 그래도
+      // 목록/지도에서 제외하진 않는다 — 반경 안 병원은 전부 보여주고, 이 값으로
+      // "소아 진료 가능" 분류·아이콘만 갈린다(나머지는 일반 병원 아이콘으로 남음).
+      acceptsPediatricPatients: isRelevantForPediatricCare(r.clinic.cl_name ?? '', r.clinic.name),
       // 실제 과목별 전문의 수(getDgsbjtInfo2.8)를 확인했으면 그게 정답이고,
       // 조회 실패(null)했을 때만 상호명/종별 추정 로직으로 대체한다.
       hasPediatricSpecialist:
@@ -266,9 +244,6 @@ export async function GET(req: NextRequest) {
             ),
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
       pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
-      // 'open'만 true — 'unknown'(정보 없음)은 undefined로 남겨서 화면이 확정적으로
-      // "진료 가능"이라고 단언하지 않게 한다(휴진인 'closed'는 이미 위에서 제외됨).
-      isOpen: r.openStatus === 'open' ? true : undefined,
     }));
 
     items.sort((a, b) => a.minutes - b.minutes);

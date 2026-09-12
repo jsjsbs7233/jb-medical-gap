@@ -1,7 +1,5 @@
 // /api/nearby가 주는 공용 Clinic[]을 두 트랙 추천 UI가 쓰는 HospitalCareInfo로 변환.
-// isOpen은 /api/nearby가 getDtlInfo2.8 요일별 진료시간으로 실측한 값이다(휴진인 곳은
-// /api/nearby가 이미 걸러서 안 보내므로 여기 남아있는 건 true거나, 진료시간 정보 자체가
-// 없어 "모름"인 undefined다). closeTime은 아직 실데이터로 안 채운다(선택 필드).
+// 실제 심평원 데이터에는 진료시간 정보가 없어서 isOpen/closeTime은 비워둔다(선택 필드).
 
 import type { Clinic } from './types';
 import type { HospitalCareInfo } from './careTypes';
@@ -23,7 +21,6 @@ export function clinicToCareInfo(c: Clinic): HospitalCareInfo {
     hasPediatricSpecialist: c.hasPediatricSpecialist ?? false,
     specialistDoctorCount: c.specialistDoctorCount,
     pediatricSpecialistCount: c.pediatricSpecialistCount,
-    isOpen: c.isOpen,
     isNightClinic: false,
     isHolidayClinic: false,
     recommendationReason: null,
