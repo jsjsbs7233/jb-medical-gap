@@ -1,69 +1,202 @@
-import Image from "next/image";
+'use client';
+
+// 소아 진료 / 소아 전문진료 두 트랙 추천 UI — 실제 /api/nearby(+/api/route) 데이터 사용.
+// 실패하거나 위치를 못 가져오면 lib/careMock.ts 목업으로 화면을 계속 채운다.
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { NearbyResponse, RouteResponse } from '@/lib/types';
+import { FALLBACK_LOCATION } from '@/lib/mock';
+import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
+import { MOCK_CARE_HOSPITALS } from '@/lib/careMock';
+import { clinicToCareInfo, applyEmergencyInfo } from '@/lib/careAdapt';
+import {
+  filterByCareType,
+  pickNearestAccepting,
+  pickNearestSpecialist,
+  sortForList,
+} from '@/lib/careRecommend';
+import CareMap from '@/components/care/CareMap';
+import CareLegend from '@/components/care/CareLegend';
+import RecommendationPanel from '@/components/care/RecommendationPanel';
+import HospitalPopup from '@/components/care/HospitalPopup';
 
 export default function Home() {
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [hospitals, setHospitals] = useState<HospitalCareInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const [filter, setFilter] = useState<CareFilter>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
+  const [mobileExpanded, setMobileExpanded] = useState(true);
+
+  // 위치 권한 요청, 실패하면 전주 좌표로 폴백
+  useEffect(() => {
+    if (!('geolocation' in navigator)) {
+      queueMicrotask(() => setUserLocation(FALLBACK_LOCATION));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => setUserLocation(FALLBACK_LOCATION),
+      { timeout: 5000 }
+    );
+  }, []);
+
+  // 주변 소아과 목록: /api/nearby 우선 시도, 실패하면 목업으로 화면을 계속 채운다
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
+
+    fetch(`/api/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`)
+      .then((res) => (res.ok ? (res.json() as Promise<NearbyResponse>) : Promise.reject(res.status)))
+      .then(async (data) => {
+        if (cancelled) return;
+        let list: HospitalCareInfo[];
+        if (data.items.length === 0) {
+          list = MOCK_CARE_HOSPITALS;
+          setNotice(data.error ?? '반경 내 데이터가 없어 예시 데이터를 보여드립니다.');
+        } else {
+          list = data.items.map(clinicToCareInfo);
+          if (data.error) setNotice(data.error);
+        }
+
+        // 응급실 실시간 가용 병상 — 목록에 걸쳐있는 시도를 전부 조회해서 병원명으로
+        // 매칭한다 (전북만 보면 경남 함양 등 인접 지역 병원이 빠진다). 실패해도
+        // 조용히 넘어간다(hasEmergencyRoom이 그냥 안 채워질 뿐).
+        const sidoList = [...new Set(list.map((h) => h.region.split(' ')[0]).filter(Boolean))];
+        if (sidoList.length > 0) {
+          try {
+            const results = await Promise.all(
+              sidoList.map((sido) =>
+                fetch(`/api/emergency/beds?sido=${encodeURIComponent(sido)}`)
+                  .then((res) => (res.ok ? res.json() : { items: [] }))
+                  .catch(() => ({ items: [] }))
+              )
+            );
+            const erItems = results.flatMap((r) => r.items ?? []);
+            if (!cancelled) list = applyEmergencyInfo(list, erItems);
+          } catch {
+            // 응급실 데이터 실패는 무시 — 나머지 화면은 그대로 정상 동작
+          }
+        }
+
+        if (!cancelled) setHospitals(list);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setHospitals(MOCK_CARE_HOSPITALS);
+        setNotice('실시간 데이터를 불러오지 못해 예시 데이터를 보여드립니다.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
+
+  const nearestGeneral = useMemo(() => pickNearestAccepting(hospitals), [hospitals]);
+  const nearestSpecialist = useMemo(() => pickNearestSpecialist(hospitals), [hospitals]);
+  const mapHospitals = useMemo(() => filterByCareType(hospitals, filter), [hospitals, filter]);
+  // 목록은 지도 마커와 달리 "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
+  const listHospitals = useMemo(() => sortForList(mapHospitals), [mapHospitals]);
+  const selectedHospital = hospitals.find((h) => h.id === selectedId) ?? null;
+
+  // 길찾기: /api/route 우선 시도, 실패하면 직선 경로로 대체
+  const handleDirections = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      if (!userLocation) return;
+      const hospital = hospitals.find((h) => h.id === id);
+      if (!hospital) return;
+
+      fetch(
+        `/api/route?sx=${userLocation.lng}&sy=${userLocation.lat}&ex=${hospital.longitude}&ey=${hospital.latitude}`
+      )
+        .then((res) => (res.ok ? (res.json() as Promise<RouteResponse>) : Promise.reject(res.status)))
+        .then((data) => setRoutePath(data.path))
+        .catch(() => {
+          setRoutePath([
+            [userLocation.lng, userLocation.lat],
+            [hospital.longitude, hospital.latitude],
+          ]);
+        });
+    },
+    [userLocation, hospitals]
+  );
+
+  const handleDetail = useCallback((id: string) => {
+    setSelectedId(id);
+    setRoutePath(null);
+  }, []);
+
+  const handleClosePopup = useCallback(() => {
+    setSelectedId(null);
+  }, []);
+
+  if (!userLocation) {
+    return (
+      <div className="flex h-dvh w-full items-center justify-center bg-neutral-100 text-sm text-neutral-400">
+        위치 확인 중...
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="relative h-dvh w-full overflow-hidden">
+      <CareMap
+        userLocation={userLocation}
+        hospitals={mapHospitals}
+        selectedId={selectedId}
+        recommendedGeneralId={nearestGeneral?.id ?? null}
+        recommendedSpecialistId={nearestSpecialist?.id ?? null}
+        routePath={routePath}
+        onSelect={(id) => {
+          setSelectedId(id);
+          setRoutePath(null);
+        }}
+      />
+
+      <RecommendationPanel
+        locationLabel={loading ? '위치 확인 중...' : `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`}
+        filter={filter}
+        onFilterChange={setFilter}
+        nearestGeneral={nearestGeneral}
+        nearestSpecialist={nearestSpecialist}
+        hospitals={listHospitals}
+        selectedId={selectedId}
+        onDetail={handleDetail}
+        onDirections={handleDirections}
+        mobileExpanded={mobileExpanded}
+        onToggleMobile={() => setMobileExpanded((v) => !v)}
+      />
+
+      <div className="absolute bottom-6 left-4 z-20 hidden md:block">
+        <CareLegend />
+      </div>
+
+      {!loading && notice && (
+        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-neutral-900/85 px-4 py-2 text-xs text-white shadow-lg md:bottom-3">
+          {notice}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      )}
+
+      {selectedHospital && !routePath && (
+        <div className="absolute bottom-28 left-1/2 z-30 -translate-x-1/2 md:bottom-6 md:left-[27rem] md:translate-x-0">
+          <HospitalPopup
+            hospital={selectedHospital}
+            onClose={handleClosePopup}
+            onDetail={handleDetail}
+            onDirections={handleDirections}
+          />
         </div>
-      </main>
+      )}
     </div>
   );
 }
