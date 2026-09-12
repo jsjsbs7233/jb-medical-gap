@@ -61,23 +61,26 @@ function nowInKST(): Date {
   return new Date(Date.now() + 9 * 60 * 60 * 1000);
 }
 
+export type OpenStatus = 'open' | 'closed' | 'unknown';
+
 /**
- * hours가 null(정보 없음)이면 true(열림으로 간주) — 데이터 없다고 숨기지 않는다.
- * 있으면 오늘 요일의 trmt{Day}Start~End 범위 안에 지금 시각이 들어가는지로 판정한다.
- * 오늘 요일 필드 자체가 없으면(=그 요일엔 진료 안 함) 휴진으로 본다.
+ * hours가 null(이 병원은 상세정보 자체가 없음 — 예: "함께하는내과의원")이면 'unknown'.
+ * 있으면 오늘 요일의 trmt{Day}Start~End 범위로 실제 판정해서 'open'/'closed'를 준다.
+ * 'unknown'을 "닫음"과 구분하는 이유 — 정보가 없다고 실제로 열려있는 병원을 화면에서
+ * 숨기면 안 되지만, 확인도 안 됐는데 "진료 가능" 배지를 확정적으로 붙이면 안 되기 때문.
  */
-export function isOpenNow(hours: OperatingHours | null, now: Date = nowInKST()): boolean {
-  if (!hours) return true;
+export function getOpenStatus(hours: OperatingHours | null, now: Date = nowInKST()): OpenStatus {
+  if (!hours) return 'unknown';
 
   const day = DAY_FIELDS[now.getUTCDay()];
   const start = hours[`trmt${day}Start` as keyof OperatingHours];
   const end = hours[`trmt${day}End` as keyof OperatingHours];
-  if (start === undefined || end === undefined) return false;
+  if (start === undefined || end === undefined) return 'closed';
 
   const startNum = Number(start);
   const endNum = Number(end);
-  if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return true;
+  if (!Number.isFinite(startNum) || !Number.isFinite(endNum)) return 'unknown';
 
   const nowHHMM = now.getUTCHours() * 100 + now.getUTCMinutes();
-  return nowHHMM >= startNum && nowHHMM < endNum;
+  return nowHHMM >= startNum && nowHHMM < endNum ? 'open' : 'closed';
 }

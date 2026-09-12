@@ -21,7 +21,7 @@ import {
   isRelevantForPediatricCare,
 } from '@/lib/pediatricSpecialist';
 import { fetchPediatricSpecialistCount } from '@/lib/hiraDeptSpecialist';
-import { fetchOperatingHours, isOpenNow } from '@/lib/hiraOperatingHours';
+import { fetchOperatingHours, getOpenStatus } from '@/lib/hiraOperatingHours';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
@@ -175,13 +175,14 @@ export async function GET(req: NextRequest) {
       withDistance.map(async (c) => {
         // 소아청소년과 전문의 정확한 인원수 + 요일별 진료시간(휴진 판정용) —
         // 이동시간 계산과 동시에 병렬로 조회한다. 진료시간 정보가 없는 병원은
-        // isOpenNow가 "모름 = 열림"으로 처리한다(§1 진료시간 필터, 팀 합의로 적용).
+        // 'unknown'으로 남긴다 — "확인된 휴진"만 걸러내고, "정보 없음"은 목록엔
+        // 남기되 "진료 가능" 배지는 안 붙인다(§1 진료시간 필터, 팀 합의로 적용).
         const [hit, pediatricSpecialistCount, hours] = await Promise.all([
           readCache(grid, c.id),
           fetchPediatricSpecialistCount(c.id),
           fetchOperatingHours(c.id),
         ]);
-        const open = isOpenNow(hours);
+        const openStatus = getOpenStatus(hours);
 
         if (hit) {
           return {
@@ -190,7 +191,7 @@ export async function GET(req: NextRequest) {
             totalDist: hit.totalDist,
             estimated: false,
             pediatricSpecialistCount,
-            open,
+            openStatus,
           };
         }
 
@@ -205,7 +206,7 @@ export async function GET(req: NextRequest) {
             totalDist: route.totalDistance,
             estimated: false,
             pediatricSpecialistCount,
-            open,
+            openStatus,
           };
         }
 
@@ -216,14 +217,14 @@ export async function GET(req: NextRequest) {
           totalDist: c.distanceKm * 1000,
           estimated: true,
           pediatricSpecialistCount,
-          open,
+          openStatus,
         };
       })
     );
 
-    // 지금 휴진인 곳은 등급 계산 전에 제외한다 — 등급은 "실제로 화면에 보여줄
-    // 후보들" 안에서의 상대 순위여야 하고, 이미 닫은 병원을 랭킹에 끼워넣으면 안 된다.
-    const openResults = results.filter((r) => r.open);
+    // 확인된 휴진("closed")만 등급 계산 전에 제외한다. "unknown"(정보 없음)은
+    // 남긴다 — 등급은 "실제로 화면에 보여줄 후보들" 안에서의 상대 순위여야 한다.
+    const openResults = results.filter((r) => r.openStatus !== 'closed');
 
     if (openResults.length === 0) {
       return NextResponse.json<NearbyResponse>({
@@ -265,7 +266,9 @@ export async function GET(req: NextRequest) {
             ),
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
       pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
-      isOpen: r.open,
+      // 'open'만 true — 'unknown'(정보 없음)은 undefined로 남겨서 화면이 확정적으로
+      // "진료 가능"이라고 단언하지 않게 한다(휴진인 'closed'는 이미 위에서 제외됨).
+      isOpen: r.openStatus === 'open' ? true : undefined,
     }));
 
     items.sort((a, b) => a.minutes - b.minutes);
