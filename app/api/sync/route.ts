@@ -39,7 +39,8 @@ const CENTERS = [
   { name: '순천', lat: 34.9506, lng: 127.4872 },
 ];
 
-export async function GET() {
+// CLAUDE.md §5 계약은 POST. 브라우저 주소창으로 수동 호출하기 편하도록 GET도 같이 열어둔다.
+async function sync() {
   const seen = new Map<string, RawClinic>();
   const report: Record<string, number> = {};
 
@@ -62,14 +63,24 @@ export async function GET() {
   // Supabase에 500건씩 잘라서 upsert. 한 청크가 실패해도 나머지는 계속 넣는다
   const supabase = getSupabaseServiceClient();
   let inserted = 0;
+  const errors: string[] = [];
   for (let i = 0; i < items.length; i += CHUNK_SIZE) {
     const chunk = items.slice(i, i + CHUNK_SIZE).map(toRow);
     const { error } = await supabase
       .from('clinics')
       .upsert(chunk, { onConflict: 'id' });
 
-    if (!error) inserted += chunk.length;
+    if (error) {
+      // 조용히 버리지 않는다 — 스키마가 안 맞는 등 실패 원인을 서버 로그와 응답에 남긴다
+      console.error(`[/api/sync] upsert 실패 (${i}~${i + chunk.length}):`, error.message);
+      errors.push(error.message);
+    } else {
+      inserted += chunk.length;
+    }
   }
 
-  return NextResponse.json({ inserted, total: items.length, bySido });
+  return NextResponse.json({ inserted, total: items.length, bySido, errors });
 }
+
+export const POST = sync;
+export const GET = sync;
