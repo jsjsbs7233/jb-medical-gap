@@ -11,6 +11,12 @@
 // ⚠ MKioskTy1~28 각각이 정확히 어떤 중증질환 항목인지는 아직 공식 코드표를
 //   못 구해서 라벨을 못 붙였다 — 지금은 원본 값을 그대로 넘긴다. 나중에 코드표를
 //   구하면 여기서 사람이 읽을 수 있는 이름으로 매핑해야 한다.
+//
+// ⚠ STAGE2(시군구)는 이 API가 기대하는 형식("전주시 덕진구", 띄어쓰기 포함)과
+//   우리 심평원 기반 데이터의 sigungu 형식("전주덕진구", 붙여쓰기·"시" 없음)이
+//   달라서 그대로 넘기면 조용히 0건이 나온다. 그래서 STAGE2는 아예 안 쓰고
+//   STAGE1(시도)만으로 조회한다 — 전북 전체 기준 6건처럼 범위가 넓어도 다루기
+//   좋은 수준이라 이 편이 더 안전하다.
 
 const BASE = 'https://apis.data.go.kr/B552657/ErmctInfoInqireService/getSrsillDissAceptncPosblInfoInqire';
 
@@ -31,13 +37,10 @@ function normalizeItems(json: unknown): Record<string, unknown>[] {
 }
 
 /**
- * 시도/시군구 기준 중증질환자 수용 가능 응급의료기관 목록을 가져온다.
+ * 시도 기준 중증질환자 수용 가능 응급의료기관 목록을 가져온다.
  * 실패해도 절대 throw하지 않는다 — 빈 배열을 반환하고 화면은 계속 정상 동작한다.
  */
-export async function fetchSevereIllnessAcceptance(
-  sido: string,
-  sigungu: string
-): Promise<SevereIllnessAcceptance[]> {
+export async function fetchSevereIllnessAcceptance(sido: string): Promise<SevereIllnessAcceptance[]> {
   const key = process.env.DATA_GO_KR_ERMCT_KEY;
   if (!key || !sido) return [];
 
@@ -45,10 +48,9 @@ export async function fetchSevereIllnessAcceptance(
     const qs = new URLSearchParams({
       serviceKey: key,
       STAGE1: sido,
-      STAGE2: sigungu || '',
       SM_TYPE: '1', // mkioskty(중증질환) Y(가능)한 병원 찾기
       pageNo: '1',
-      numOfRows: '20',
+      numOfRows: '50',
       _type: 'json',
     });
 
