@@ -155,7 +155,7 @@ export default function Home() {
       if (!cancelled) setEmergencyLoading(true);
     });
 
-    fetch(`/api/emergency/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=30`)
+    fetch(`/api/emergency/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=20`)
       .then((res) => (res.ok ? res.json() : { items: [] }))
       .then((data) => {
         if (!cancelled) setEmergencyHospitals((data.items ?? []).map(erHospitalToCareInfo));
@@ -275,7 +275,7 @@ export default function Home() {
 
       {!loading && (emergencyLoading ? true : !!notice) && (
         <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-neutral-900/85 px-4 py-2 text-xs text-white shadow-lg md:bottom-3">
-          {emergencyLoading ? '반경 30km 내 응급실을 불러오는 중...' : notice}
+          {emergencyLoading ? '반경 20km 내 응급실을 불러오는 중...' : notice}
         </div>
       )}
 

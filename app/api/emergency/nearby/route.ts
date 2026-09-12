@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAllErHospitals, fetchErRealtimeBeds, type NearbyErHospital } from '@/lib/hiraEmergency';
 import { haversineKm } from '@/lib/geo';
+import { getRoute } from '@/lib/tmap';
 
-const DEFAULT_RADIUS_KM = 30;
-const FALLBACK_KMH = 45; // 실시간 경로 없이 직선거리로만 추정(Tmap 호출 안 함 — 최대 500여 곳이라 호출량이 너무 커짐)
+const DEFAULT_RADIUS_KM = 20;
+const FALLBACK_KMH = 45; // Tmap 호출이 실패했을 때만 직선거리로 추정
+// 반경을 줄여도 도심에선 응급실이 많이 몰려 있을 수 있어, Tmap 호출은 haversine
+// 기준 가장 가까운 이 숫자까지만 부른다(한도 보호) — 나머지는 그냥 반경 밖으로 버린다.
+const MAX_TMAP_CANDIDATES = 20;
 
 /**
  * "응급실" 필터 전용 — 소아과 후보 목록과 무관하게, 반경 내 응급실 운영 기관을
- * 전부 보여준다. 500여 곳 전체에 실시간 경로(Tmap)를 부르면 한도가 바로 소진되니
- * 직선거리 추정 시간만 쓴다. 실패해도 200 + 빈 배열.
+ * 전부 실시간 경로(Tmap) 기준으로 보여준다. 실패해도 200 + 빈 배열.
  */
 export async function GET(req: NextRequest) {
   const lat = Number(req.nextUrl.searchParams.get('lat'));
@@ -26,7 +29,8 @@ export async function GET(req: NextRequest) {
     const withinRadius = all
       .map((h) => ({ ...h, distanceKm: haversineKm({ lat, lng }, { lat: h.lat, lng: h.lng }) }))
       .filter((h) => h.distanceKm <= radiusKm)
-      .sort((a, b) => a.distanceKm - b.distanceKm);
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, MAX_TMAP_CANDIDATES);
 
     if (withinRadius.length === 0) {
       return NextResponse.json({ items: [], error: `반경 ${radiusKm}km 내 응급실이 없습니다` });
@@ -36,23 +40,32 @@ export async function GET(req: NextRequest) {
     const bedLists = await Promise.all(sidoList.map((sido) => fetchErRealtimeBeds(sido)));
     const bedsByHpid = new Map(bedLists.flat().map((b) => [b.hpid, b]));
 
-    const items: NearbyErHospital[] = withinRadius.map((h) => {
-      const bed = bedsByHpid.get(h.hpid);
-      return {
-        id: h.hpid,
-        name: h.name,
-        addr: h.addr,
-        sido: h.sido,
-        tel: h.tel,
-        lat: h.lat,
-        lng: h.lng,
-        distanceKm: Math.round(h.distanceKm * 10) / 10,
-        minutes: Math.max(1, Math.round((h.distanceKm / FALLBACK_KMH) * 60)),
-        hasEmergencyRoom: true,
-        erAvailableBeds: bed?.availableBeds,
-        erUpdatedAt: bed?.updatedAt,
-      };
-    });
+    const items: NearbyErHospital[] = await Promise.all(
+      withinRadius.map(async (h) => {
+        const bed = bedsByHpid.get(h.hpid);
+        const route = await getRoute({ lat, lng }, { lat: h.lat, lng: h.lng }, false);
+
+        const distanceKm = route ? Math.round((route.totalDistance / 1000) * 10) / 10 : Math.round(h.distanceKm * 10) / 10;
+        const minutes = route
+          ? Math.max(1, Math.round(route.totalTime / 60))
+          : Math.max(1, Math.round((h.distanceKm / FALLBACK_KMH) * 60));
+
+        return {
+          id: h.hpid,
+          name: h.name,
+          addr: h.addr,
+          sido: h.sido,
+          tel: h.tel,
+          lat: h.lat,
+          lng: h.lng,
+          distanceKm,
+          minutes,
+          hasEmergencyRoom: true,
+          erAvailableBeds: bed?.availableBeds,
+          erUpdatedAt: bed?.updatedAt,
+        };
+      })
+    );
 
     // 병상이 있는 곳을 먼저, 그다음 짧은 시간순으로 정렬한다 — 아무리 가까워도
     // 지금 받을 수 있는 병상이 0(또는 그 이하로 초과)이면 실제로는 못 가는
