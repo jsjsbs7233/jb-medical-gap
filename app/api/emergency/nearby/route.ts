@@ -54,6 +54,20 @@ export async function GET(req: NextRequest) {
       };
     });
 
+    // 병상이 있는 곳을 먼저, 그다음 짧은 시간순으로 정렬한다 — 아무리 가까워도
+    // 지금 받을 수 있는 병상이 0(또는 그 이하로 초과)이면 실제로는 못 가는
+    // 병원이라 단순 거리순 위에 두면 안 된다. 병상 정보를 못 찾은 곳(매칭 실패)은
+    // "없다"고 확정할 수 없으니 있음/없음 사이 중간 순위로 둔다.
+    function bedTier(beds: number | undefined): number {
+      if (beds === undefined) return 1; // 정보 없음 — 중간
+      return beds > 0 ? 0 : 2; // 있음 — 최우선 / 0 이하(꽉 참) — 최하위
+    }
+    items.sort((a, b) => {
+      const tierDiff = bedTier(a.erAvailableBeds) - bedTier(b.erAvailableBeds);
+      if (tierDiff !== 0) return tierDiff;
+      return a.distanceKm - b.distanceKm;
+    });
+
     return NextResponse.json({ items });
   } catch {
     return NextResponse.json({ items: [], error: '일시적으로 정보를 불러오지 못했습니다' });
