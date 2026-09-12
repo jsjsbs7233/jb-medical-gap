@@ -4,7 +4,7 @@ import { fetchAround } from '@/lib/hira';
 import { supabaseServer, type ClinicRow } from '@/lib/supabase';
 import { gridKey, haversineKm } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
-import { isPediatricSpecialistInstitution } from '@/lib/pediatricSpecialist';
+import { isPediatricSpecialistInstitution, isRelevantForPediatricCare } from '@/lib/pediatricSpecialist';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 
 const CANDIDATES = 8; // 거리순으로 Tmap을 부를 병원 수
@@ -114,6 +114,9 @@ export async function GET(req: NextRequest) {
     const scored = base
       .map((c) => ({ ...c, distanceKm: haversineKm({ lat, lng }, { lat: c.lat, lng: c.lng }) }))
       .filter((c) => c.distanceKm <= RADIUS_KM)
+      // dgsbjtCd=11로 걸러졌어도 상호가 정형외과·이비인후과 등 소아과와 무관한
+      // 전문과목이면 제외한다 (실제 심평원 데이터에 이런 경우가 섞여 있음)
+      .filter((c) => isRelevantForPediatricCare(c.cl_name ?? '', c.name))
       .sort((a, b) => a.distanceKm - b.distanceKm);
 
     const nearestOverall = scored.slice(0, CANDIDATES);

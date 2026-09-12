@@ -17,11 +17,30 @@
 //      아닌 것으로 본다(= acceptsPediatricPatients만 true).
 //
 // ⚠ getDgsbjtInfo 승인이 나면 이 함수를 실제 전문의 수 데이터로 교체해야 한다.
+//
+// 추가 문제: dgsbjtCd=11 필터를 실제로 호출해보면 "마디정형외과의원",
+// "강초희유외과의원", "고려마취통증의학과의원" 같은, 상식적으로 아이를 데려갈 일이
+// 없는 병원까지 걸려 나온다 — 코드 오류가 아니라, 이런 의원들도 진료과목을
+// 소아청소년과로 "같이" 등록해뒀기 때문이다(보험 청구용으로 추정). 그래서
+// "소아 진료 가능" 쪽도 상호명으로 한 번 더 걸러낸다: 상호에 소아과와 무관한
+// 전문과목(외과·이비인후과·마취통증의학과 등)이 명시돼 있으면 제외한다.
 
 const HOSPITAL_GRADE_NAMES = new Set(['상급종합', '종합병원', '병원']);
 const PEDIATRIC_NAME_PATTERN = /소아청소년과|소아과/;
 
+// 상호에 이 중 하나라도 들어있으면, 소아과와 무관한 전문과목을 표방하는
+// 의원으로 보고 "소아 진료 가능" 목록에서도 제외한다.
+const NON_PEDIATRIC_SPECIALTY_PATTERN =
+  /외과|이비인후과|마취통증의학과|비뇨의학과|비뇨기과|피부과|안과|산부인과|여성의원|여성병원|치과|한의원|한방|영상의학과|병리과|진단검사의학과|방사선종양학과|핵의학과|정신건강의학과|신경정신과/;
+
 export function isPediatricSpecialistInstitution(clName: string, name: string): boolean {
   if (HOSPITAL_GRADE_NAMES.has(clName)) return true;
   return PEDIATRIC_NAME_PATTERN.test(name);
+}
+
+/** dgsbjtCd=11로 걸러졌더라도, 상호가 소아과와 무관한 전문과목이면 후보에서 뺀다. */
+export function isRelevantForPediatricCare(clName: string, name: string): boolean {
+  if (HOSPITAL_GRADE_NAMES.has(clName)) return true; // 병원급 이상은 소아청소년과가 실제로 있다고 봄
+  if (PEDIATRIC_NAME_PATTERN.test(name)) return true; // 상호에 소아과 명시
+  return !NON_PEDIATRIC_SPECIALTY_PATTERN.test(name);
 }
