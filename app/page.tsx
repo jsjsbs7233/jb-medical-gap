@@ -31,8 +31,22 @@ export default function Home() {
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(true);
 
-  // 위치 권한 요청, 실패하면 전주 좌표로 폴백
+  // 위치 권한 요청, 실패하면 전주 좌표로 폴백.
+  // URL에 ?lat=&lng=가 있으면 GPS보다 우선한다 — 발표장에서 GPS를 켜면 발표장
+  // 좌표가 잡혀 시연 좌표(순창 등)를 못 띄우는 문제 때문에 필요하다.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const latParam = params.get('lat');
+    const lngParam = params.get('lng');
+    if (latParam !== null && lngParam !== null) {
+      const lat = Number(latParam);
+      const lng = Number(lngParam);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        queueMicrotask(() => setUserLocation({ lat, lng }));
+        return;
+      }
+    }
+
     if (!('geolocation' in navigator)) {
       queueMicrotask(() => setUserLocation(FALLBACK_LOCATION));
       return;
