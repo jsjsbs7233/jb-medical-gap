@@ -33,6 +33,11 @@ export default function RecommendationPanel({
   mobileExpanded,
   onToggleMobile,
 }: Props) {
+  // 응급실 필터일 땐 "전문의 추천"이 아니라, 이미 병상 있음 우선 + 거리순으로
+  // 정렬된 응급실 목록(hospitals)의 1위를 그대로 최상단 카드에 보여준다 —
+  // 전문의 유무와 무관하게 "지금 갈 수 있는 가장 가까운 응급실"이어야 하기 때문.
+  const topPick = filter === 'emergency' ? (hospitals[0] ?? null) : nearestSpecialist;
+
   const body = (
     <>
       <div className="mb-1 flex items-center gap-1.5 text-xs text-neutral-500">
@@ -45,10 +50,21 @@ export default function RecommendationPanel({
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
-        {nearestSpecialist ? (
-          <SpecialistCareCard hospital={nearestSpecialist} onDetail={onDetail} onDirections={onDirections} />
+        {topPick ? (
+          <SpecialistCareCard
+            hospital={topPick}
+            onDetail={onDetail}
+            onDirections={onDirections}
+            title={filter === 'emergency' ? '⭐ 지금 갈 수 있는 가장 가까운 응급실' : undefined}
+          />
         ) : (
-          <EmptyNotice text="반경 내 소아청소년과 전문의 의료기관이 없습니다." />
+          <EmptyNotice
+            text={
+              filter === 'emergency'
+                ? '반경 내 응급실이 없습니다.'
+                : '반경 내 소아청소년과 전문의 의료기관이 없습니다.'
+            }
+          />
         )}
       </div>
 
