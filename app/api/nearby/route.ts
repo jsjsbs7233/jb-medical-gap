@@ -12,6 +12,7 @@ import { CANDIDATES, RADIUS_KM, CACHE_SEC, haversineKm, toGridKey, boundingBox }
 import { gradeByRank, delayRatio } from '@/lib/grade';
 import { getRoute } from '@/lib/tmap';
 import type { Clinic, NearbyResponse } from '@/lib/types';
+import demoFixtures from '@/lib/demoFixtures.json';
 
 // Tmap이 죽었을 때 직선거리를 시간으로 환산하는 가정 속도 (km/h)
 const FALLBACK_KMH = 45;
@@ -39,6 +40,17 @@ export async function GET(req: NextRequest) {
     return empty('lat/lng 값이 올바르지 않습니다');
   }
 
+  const gridKey = toGridKey(lat, lng);
+
+  // 최후의 보험(CLAUDE.md §7) — DB/Tmap을 아예 건드리지 않고 미리 검증해둔 고정 응답을 낸다.
+  // 발표 시연 좌표(DEMO.md)에서만 동작하고, 그 외 좌표는 평소처럼 실시간 로직을 탄다.
+  if (process.env.DEMO_MODE === '1') {
+    const fixture = (demoFixtures as Record<string, NearbyResponse>)[gridKey];
+    if (fixture) {
+      return NextResponse.json<NearbyResponse>(fixture);
+    }
+  }
+
   try {
     const supabase = getSupabaseServiceClient();
 
@@ -61,8 +73,6 @@ export async function GET(req: NextRequest) {
       .filter((c) => c.distanceKm <= RADIUS_KM) // 사각형은 원보다 넓으니 정확한 반경으로 다시 거른다
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, CANDIDATES);
-
-    const gridKey = toGridKey(lat, lng);
 
     if (candidates.length === 0) {
       return NextResponse.json<NearbyResponse>({
