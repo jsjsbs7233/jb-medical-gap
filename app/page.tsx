@@ -181,7 +181,6 @@ export default function Home() {
         locationLabel={loading ? '위치 확인 중...' : `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`}
         filter={filter}
         onFilterChange={setFilter}
-        nearestGeneral={nearestGeneral}
         nearestSpecialist={nearestSpecialist}
         hospitals={listHospitals}
         selectedId={selectedId}

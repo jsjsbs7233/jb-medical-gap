@@ -1,7 +1,6 @@
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { summarizeEmergencyBeds } from '@/lib/careRecommend';
 import HospitalFilter from './HospitalFilter';
-import PediatricCareCard from './PediatricCareCard';
 import SpecialistCareCard from './SpecialistCareCard';
 import HospitalListItem from './HospitalListItem';
 
@@ -9,7 +8,6 @@ interface Props {
   locationLabel: string;
   filter: CareFilter;
   onFilterChange: (v: CareFilter) => void;
-  nearestGeneral: HospitalCareInfo | null;
   nearestSpecialist: HospitalCareInfo | null;
   hospitals: HospitalCareInfo[]; // 주변 병원 전체 목록(필터 적용됨, 이동시간 오름차순)
   selectedId: string | null;
@@ -20,14 +18,13 @@ interface Props {
 }
 
 /**
- * "가까운 소아 진료" + "가장 가까운 소아 전문진료" 두 추천을 함께 보여주는 패널.
+ * "가장 가까운 소아 전문진료" 추천을 보여주는 패널.
  * 데스크톱: 좌측 고정 패널 / 모바일: 하단 바텀시트.
  */
 export default function RecommendationPanel({
   locationLabel,
   filter,
   onFilterChange,
-  nearestGeneral,
   nearestSpecialist,
   hospitals,
   selectedId,
@@ -48,12 +45,6 @@ export default function RecommendationPanel({
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
-        {nearestGeneral ? (
-          <PediatricCareCard hospital={nearestGeneral} onDetail={onDetail} onDirections={onDirections} />
-        ) : (
-          <EmptyNotice text="반경 내 소아 진료 가능한 의료기관이 없습니다." />
-        )}
-
         {nearestSpecialist ? (
           <SpecialistCareCard hospital={nearestSpecialist} onDetail={onDetail} onDirections={onDirections} />
         ) : (
