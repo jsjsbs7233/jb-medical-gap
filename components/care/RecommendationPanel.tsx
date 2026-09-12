@@ -1,7 +1,6 @@
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { summarizeEmergencyBeds } from '@/lib/careRecommend';
 import HospitalFilter from './HospitalFilter';
-import RadiusSelector from './RadiusSelector';
 import PediatricCareCard from './PediatricCareCard';
 import SpecialistCareCard from './SpecialistCareCard';
 import HospitalListItem from './HospitalListItem';
@@ -10,8 +9,6 @@ interface Props {
   locationLabel: string;
   filter: CareFilter;
   onFilterChange: (v: CareFilter) => void;
-  radiusKm: number;
-  onRadiusChange: (v: number) => void;
   nearestGeneral: HospitalCareInfo | null;
   nearestSpecialist: HospitalCareInfo | null;
   hospitals: HospitalCareInfo[]; // 주변 병원 전체 목록(필터 적용됨, 이동시간 오름차순)
@@ -30,8 +27,6 @@ export default function RecommendationPanel({
   locationLabel,
   filter,
   onFilterChange,
-  radiusKm,
-  onRadiusChange,
   nearestGeneral,
   nearestSpecialist,
   hospitals,
@@ -48,9 +43,8 @@ export default function RecommendationPanel({
       </div>
       <p className="text-sm font-semibold text-neutral-800">{locationLabel}</p>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mt-3">
         <HospitalFilter value={filter} onChange={onFilterChange} />
-        <RadiusSelector value={radiusKm} onChange={onRadiusChange} />
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
