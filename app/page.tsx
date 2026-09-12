@@ -9,7 +9,12 @@ import { FALLBACK_LOCATION } from '@/lib/mock';
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { MOCK_CARE_HOSPITALS } from '@/lib/careMock';
 import { clinicToCareInfo } from '@/lib/careAdapt';
-import { filterByCareType, pickNearestAccepting, pickNearestSpecialist } from '@/lib/careRecommend';
+import {
+  filterByCareType,
+  pickNearestAccepting,
+  pickNearestSpecialist,
+  sortForList,
+} from '@/lib/careRecommend';
 import CareMap from '@/components/care/CareMap';
 import CareLegend from '@/components/care/CareLegend';
 import RecommendationPanel from '@/components/care/RecommendationPanel';
@@ -76,6 +81,8 @@ export default function Home() {
   const nearestGeneral = useMemo(() => pickNearestAccepting(hospitals), [hospitals]);
   const nearestSpecialist = useMemo(() => pickNearestSpecialist(hospitals), [hospitals]);
   const mapHospitals = useMemo(() => filterByCareType(hospitals, filter), [hospitals, filter]);
+  // 목록은 지도 마커와 달리 "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
+  const listHospitals = useMemo(() => sortForList(mapHospitals), [mapHospitals]);
   const selectedHospital = hospitals.find((h) => h.id === selectedId) ?? null;
 
   // 길찾기: /api/route 우선 시도, 실패하면 직선 경로로 대체
@@ -139,7 +146,7 @@ export default function Home() {
         onFilterChange={setFilter}
         nearestGeneral={nearestGeneral}
         nearestSpecialist={nearestSpecialist}
-        hospitals={mapHospitals}
+        hospitals={listHospitals}
         selectedId={selectedId}
         onDetail={handleDetail}
         onDirections={handleDirections}

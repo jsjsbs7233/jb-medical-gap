@@ -26,3 +26,21 @@ export function filterByCareType(
   if (filter === 'specialist') return hospitals.filter((h) => h.hasPediatricSpecialist);
   return hospitals;
 }
+
+/**
+ * "주변 병원 목록" 정렬 — 이동시간 하나만으로 줄 세우면 일반의(가정의학과 등)가
+ * 전문의보다 앞에 뜨는 게 이상해 보인다. 그래서 전문의 여부를 먼저 나누고,
+ * 각 그룹 안에서만 이동시간 오름차순으로 정렬한다.
+ *   1. 전문의 + 시간 짧은 순
+ *   2. 전문의 + 시간 긴 순
+ *   3. 일반의 + 시간 짧은 순
+ *   4. 일반의 + 시간 긴 순
+ */
+export function sortForList(hospitals: HospitalCareInfo[]): HospitalCareInfo[] {
+  return [...hospitals].sort((a, b) => {
+    if (a.hasPediatricSpecialist !== b.hasPediatricSpecialist) {
+      return a.hasPediatricSpecialist ? -1 : 1;
+    }
+    return a.travelTime - b.travelTime;
+  });
+}
