@@ -107,8 +107,8 @@ export default function CareMap({
     hospitals.forEach((h) => {
       const isSelected = h.id === selectedId;
       const isRecommended = h.id === recommendedGeneralId || h.id === recommendedSpecialistId;
-      // 마커 색은 병원 종류가 아니라 실시간 교통(이동시간 등급)을 나타낸다.
-      const { uri, size } = careMarkerIcon(h.grade, h.travelTime, {
+      // 마커 색은 실시간 교통(이동시간 등급), 안의 아이콘은 병원 종류(전문의=아기 얼굴/일반=병원 건물).
+      const { uri, size } = careMarkerIcon(h.grade, h.hasPediatricSpecialist ? 'specialist' : 'general', {
         selected: isSelected,
         recommended: isRecommended,
       });
