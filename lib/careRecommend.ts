@@ -17,6 +17,15 @@ export function pickNearestSpecialist(hospitals: HospitalCareInfo[]): HospitalCa
   return [...candidates].sort((a, b) => a.travelTime - b.travelTime)[0];
 }
 
+/**
+ * "전북 밖" 여부 — 이 프로젝트의 핵심 메시지("전북 밖이지만 전주보다 빠릅니다")를
+ * 보여줄지 판단할 때 쓴다. region은 "시도 시군구" 형태라 앞부분만 본다.
+ */
+export function isOutsideJeonbuk(region: string): boolean {
+  const sido = region.split(' ')[0] ?? '';
+  return !sido.startsWith('전북') && !sido.startsWith('전라북도');
+}
+
 /** 지도 마커/목록 필터링 — "전체 / 소아 진료 가능 / 전문의 진료 / 응급실" */
 export function filterByCareType(
   hospitals: HospitalCareInfo[],
