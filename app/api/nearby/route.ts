@@ -213,7 +213,19 @@ export async function GET(req: NextRequest) {
     const minutesList = results.map((r) => Math.max(1, Math.round(r.totalTime / 60)));
     const grades = gradeByRank(minutesList);
 
-    const items: Clinic[] = results.map((r, i) => ({
+    const items: Clinic[] = results.map((r, i) => {
+      // 실제 과목별 전문의 수(getDgsbjtInfo2.8)를 확인했으면 그게 정답이고,
+      // 조회 실패(null)했을 때만 상호명/종별 추정 로직으로 대체한다.
+      const hasPediatricSpecialist =
+        r.pediatricSpecialistCount !== null
+          ? r.pediatricSpecialistCount > 0
+          : isPediatricSpecialistInstitution(
+              r.clinic.cl_name ?? '',
+              r.clinic.name,
+              r.clinic.specialist_doctor_count ?? undefined
+            );
+
+      return {
       id: r.clinic.id,
       name: r.clinic.name,
       addr: r.clinic.addr,
@@ -228,23 +240,17 @@ export async function GET(req: NextRequest) {
       grade: grades[i],
       estimated: r.estimated,
       // dgsbjtCd=11(소아청소년과)로 걸러진 후보지만, 정형외과·이비인후과 등 상호가
-      // 소아과와 무관한 전문과목이면 "소아 진료 가능"으로 보지 않는다. 그래도
-      // 목록/지도에서 제외하진 않는다 — 반경 안 병원은 전부 보여주고, 이 값으로
-      // "소아 진료 가능" 분류·아이콘만 갈린다(나머지는 일반 병원 아이콘으로 남음).
-      acceptsPediatricPatients: isRelevantForPediatricCare(r.clinic.cl_name ?? '', r.clinic.name),
-      // 실제 과목별 전문의 수(getDgsbjtInfo2.8)를 확인했으면 그게 정답이고,
-      // 조회 실패(null)했을 때만 상호명/종별 추정 로직으로 대체한다.
-      hasPediatricSpecialist:
-        r.pediatricSpecialistCount !== null
-          ? r.pediatricSpecialistCount > 0
-          : isPediatricSpecialistInstitution(
-              r.clinic.cl_name ?? '',
-              r.clinic.name,
-              r.clinic.specialist_doctor_count ?? undefined
-            ),
+      // 소아과와 무관한 전문과목이면 이름만으론 "소아 진료 가능"으로 안 본다.
+      // 단, 실제 전문의가 확인됐으면("한나여성의원"처럼 이름은 산부인과 계열이어도
+      // 실측 데이터에 소아청소년과 전문의 1명이 있는 경우) 이름 추정보다 우선한다 —
+      // 전문의가 있는데 "소아 진료 불가"로 나오면 앞뒤가 안 맞는다.
+      acceptsPediatricPatients:
+        isRelevantForPediatricCare(r.clinic.cl_name ?? '', r.clinic.name) || hasPediatricSpecialist,
+      hasPediatricSpecialist,
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
       pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
-    }));
+      };
+    });
 
     items.sort((a, b) => a.minutes - b.minutes);
 
