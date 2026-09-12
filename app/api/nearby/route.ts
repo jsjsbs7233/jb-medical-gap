@@ -7,6 +7,7 @@
  * ② bounding box + 직선거리로 반경 60km 내 가까운 8개 + 전문의 병원 최대 3개를 더한다
  * ③ 위치를 격자로 스냅해 캐시가 있으면 그대로 쓴다(Supabase 있으면 DB, 없으면 서버 메모리)
  * ④ 캐시에 없는 후보만 Tmap 병렬 호출
+ * ⑤ 지금(KST) 휴진인 곳은 등급 계산 전에 제외한다 (getDtlInfo2.8 요일별 진료시간)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoute } from '@/lib/tmap';
@@ -20,6 +21,7 @@ import {
   isRelevantForPediatricCare,
 } from '@/lib/pediatricSpecialist';
 import { fetchPediatricSpecialistCount } from '@/lib/hiraDeptSpecialist';
+import { fetchOperatingHours, isOpenNow } from '@/lib/hiraOperatingHours';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
@@ -171,12 +173,15 @@ export async function GET(req: NextRequest) {
 
     const results = await Promise.all(
       withDistance.map(async (c) => {
-        // 소아청소년과 전문의 정확한 인원수 — 이동시간 계산과 동시에 병렬로 조회한다.
-        // 실패(null)하면 아래에서 기존 추정 로직으로 대체한다.
-        const [hit, pediatricSpecialistCount] = await Promise.all([
+        // 소아청소년과 전문의 정확한 인원수 + 요일별 진료시간(휴진 판정용) —
+        // 이동시간 계산과 동시에 병렬로 조회한다. 진료시간 정보가 없는 병원은
+        // isOpenNow가 "모름 = 열림"으로 처리한다(§1 진료시간 필터, 팀 합의로 적용).
+        const [hit, pediatricSpecialistCount, hours] = await Promise.all([
           readCache(grid, c.id),
           fetchPediatricSpecialistCount(c.id),
+          fetchOperatingHours(c.id),
         ]);
+        const open = isOpenNow(hours);
 
         if (hit) {
           return {
@@ -185,6 +190,7 @@ export async function GET(req: NextRequest) {
             totalDist: hit.totalDist,
             estimated: false,
             pediatricSpecialistCount,
+            open,
           };
         }
 
@@ -199,6 +205,7 @@ export async function GET(req: NextRequest) {
             totalDist: route.totalDistance,
             estimated: false,
             pediatricSpecialistCount,
+            open,
           };
         }
 
@@ -209,14 +216,28 @@ export async function GET(req: NextRequest) {
           totalDist: c.distanceKm * 1000,
           estimated: true,
           pediatricSpecialistCount,
+          open,
         };
       })
     );
 
-    const minutesList = results.map((r) => Math.max(1, Math.round(r.totalTime / 60)));
+    // 지금 휴진인 곳은 등급 계산 전에 제외한다 — 등급은 "실제로 화면에 보여줄
+    // 후보들" 안에서의 상대 순위여야 하고, 이미 닫은 병원을 랭킹에 끼워넣으면 안 된다.
+    const openResults = results.filter((r) => r.open);
+
+    if (openResults.length === 0) {
+      return NextResponse.json<NearbyResponse>({
+        items: [],
+        gridKey: grid,
+        cached: allFromCache,
+        error: '지금 진료 중인 소아과가 반경 안에 없습니다',
+      });
+    }
+
+    const minutesList = openResults.map((r) => Math.max(1, Math.round(r.totalTime / 60)));
     const grades = gradeByRank(minutesList);
 
-    const items: Clinic[] = results.map((r, i) => ({
+    const items: Clinic[] = openResults.map((r, i) => ({
       id: r.clinic.id,
       name: r.clinic.name,
       addr: r.clinic.addr,
@@ -244,6 +265,7 @@ export async function GET(req: NextRequest) {
             ),
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
       pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
+      isOpen: r.open,
     }));
 
     items.sort((a, b) => a.minutes - b.minutes);
