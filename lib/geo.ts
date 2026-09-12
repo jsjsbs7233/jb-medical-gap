@@ -42,3 +42,23 @@ export function toGridKey(lat: number, lng: number): string {
   const lngGrid = Math.round(lng / GRID);
   return `${latGrid}_${lngGrid}`;
 }
+
+/**
+ * 반경(km)을 감싸는 사각형 범위. DB 쿼리에서 1차로 걸러 haversine 계산량을
+ * 줄이는 용도 — clinics 테이블이 커질수록 매 요청 전체 스캔을 피해야 한다.
+ * 위도 1도 ≈ 111km, 경도는 위도에 따라 좁아지므로 cos(lat)로 보정한다.
+ */
+export function boundingBox(
+  center: { lat: number; lng: number },
+  radiusKm: number,
+): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+  const latDelta = radiusKm / 111;
+  const lngDelta = radiusKm / (111 * Math.cos(toRad(center.lat)) || 1);
+
+  return {
+    minLat: center.lat - latDelta,
+    maxLat: center.lat + latDelta,
+    minLng: center.lng - lngDelta,
+    maxLng: center.lng + lngDelta,
+  };
+}

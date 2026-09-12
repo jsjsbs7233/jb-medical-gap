@@ -8,7 +8,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase';
-import { CANDIDATES, RADIUS_KM, CACHE_SEC, haversineKm, toGridKey } from '@/lib/geo';
+import { CANDIDATES, RADIUS_KM, CACHE_SEC, haversineKm, toGridKey, boundingBox } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
 import { getRoute } from '@/lib/tmap';
 import type { Clinic, NearbyResponse } from '@/lib/types';
@@ -28,25 +28,37 @@ export async function GET(req: NextRequest) {
   const lat = Number(latParam);
   const lng = Number(lngParam);
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return empty('lat/lng 파라미터가 필요합니다');
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180
+  ) {
+    return empty('lat/lng 값이 올바르지 않습니다');
   }
 
   try {
     const supabase = getSupabaseServiceClient();
 
+    // ② 직선거리로 후보 압축 — DB 쿼리에서 먼저 사각형으로 좁혀 haversine 계산량을 줄인다
+    const box = boundingBox({ lat, lng }, RADIUS_KM);
     const { data: clinics, error: dbError } = await supabase
       .from('clinics')
-      .select('id, name, sido, sigungu, addr, tel, lat, lng');
+      .select('id, name, sido, sigungu, addr, tel, lat, lng')
+      .gte('lat', box.minLat)
+      .lte('lat', box.maxLat)
+      .gte('lng', box.minLng)
+      .lte('lng', box.maxLng);
 
     if (dbError || !clinics) {
       return empty('병원 목록을 불러오지 못했습니다');
     }
 
-    // ② 직선거리로 후보 압축
     const candidates = clinics
       .map((c) => ({ ...c, distanceKm: haversineKm({ lat, lng }, { lat: c.lat, lng: c.lng }) }))
-      .filter((c) => c.distanceKm <= RADIUS_KM)
+      .filter((c) => c.distanceKm <= RADIUS_KM) // 사각형은 원보다 넓으니 정확한 반경으로 다시 거른다
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, CANDIDATES);
 
