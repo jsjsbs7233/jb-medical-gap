@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchAround, type RawClinic } from '@/lib/hira';
-import { supabaseAdmin } from '@/lib/supabase';
+import { getSupabaseServiceClient } from '@/lib/supabase';
 
 export const maxDuration = 60;   // 시간이 걸리는 작업이라 늘려둔다
 
@@ -60,10 +60,11 @@ export async function GET() {
   items.forEach(x => { bySido[x.sido] = (bySido[x.sido] ?? 0) + 1; });
 
   // Supabase에 500건씩 잘라서 upsert. 한 청크가 실패해도 나머지는 계속 넣는다
+  const supabase = getSupabaseServiceClient();
   let inserted = 0;
   for (let i = 0; i < items.length; i += CHUNK_SIZE) {
     const chunk = items.slice(i, i + CHUNK_SIZE).map(toRow);
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('clinics')
       .upsert(chunk, { onConflict: 'id' });
 
