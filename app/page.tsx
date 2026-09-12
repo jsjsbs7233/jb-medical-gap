@@ -19,6 +19,7 @@ import {
   pickNearestAccepting,
   pickNearestSpecialist,
   sortForList,
+  sortByTravelTime,
 } from '@/lib/careRecommend';
 import CareMap from '@/components/care/CareMap';
 import CareLegend from '@/components/care/CareLegend';
@@ -185,12 +186,15 @@ export default function Home() {
         : filterByCareType(hospitals, filter),
     [hospitals, filter, emergencyHospitals]
   );
-  // 목록은 지도 마커와 달리 "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
-  // (응급실 목록은 이미 거리순으로 와서 그대로 둔다 — 전문의 여부를 모르는 병원들이라
-  // sortForList로 다시 묶으면 의미가 없다)
-  const listHospitals = useMemo(
-    () => (filter === 'emergency' ? mapHospitals : sortForList(mapHospitals)),
-    [mapHospitals, filter]
+  // 목록 정렬은 필터마다 다르다.
+  // - 응급실: 이미 병상순으로 와서 그대로 둔다.
+  // - 소아 진료 가능: 전문의 여부와 무관하게 순수 이동시간순.
+  // - 전체/전문의 진료: "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
+  const listHospitals = useMemo(() => {
+    if (filter === 'emergency') return mapHospitals;
+    if (filter === 'general') return sortByTravelTime(mapHospitals);
+    return sortForList(mapHospitals);
+  }, [mapHospitals, filter]
   );
   // selectedId는 필터에 따라 hospitals(소아과 후보) 또는 mapHospitals(응급실
   // 전체, 소아과 정보 보강됨) 어느 쪽에서 왔을 수 있어서 둘 다 찾아본다.

@@ -71,3 +71,11 @@ export function sortForList(hospitals: HospitalCareInfo[]): HospitalCareInfo[] {
     return byTravelTimeThenDistance(a, b);
   });
 }
+
+/**
+ * "소아 진료 가능" 필터 전용 정렬 — 전문의 여부로 묶지 않고, 전문의든 일반의든
+ * 상관없이 이동시간이 짧은 순서 그대로 보여준다.
+ */
+export function sortByTravelTime(hospitals: HospitalCareInfo[]): HospitalCareInfo[] {
+  return [...hospitals].sort(byTravelTimeThenDistance);
+}
