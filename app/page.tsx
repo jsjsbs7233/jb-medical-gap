@@ -1,69 +1,143 @@
-import Image from "next/image";
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import type { Clinic, NearbyResponse, RouteResponse } from '@/lib/types';
+import { MOCK_CLINICS, FALLBACK_LOCATION } from '@/lib/mock';
+import HospitalMap from '@/components/HospitalMap';
+import HospitalSheet from '@/components/HospitalSheet';
+import Legend from '@/components/Legend';
 
 export default function Home() {
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [clinics, setClinics] = useState<Clinic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
+
+  // 위치 권한 요청, 실패하면 전주 좌표로 폴백
+  useEffect(() => {
+    if (!('geolocation' in navigator)) {
+      // setState는 콜백 안에서 — react-hooks/set-state-in-effect
+      queueMicrotask(() => setUserLocation(FALLBACK_LOCATION));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => setUserLocation(FALLBACK_LOCATION),
+      { timeout: 5000 }
+    );
+  }, []);
+
+  // 주변 소아과 목록: /api/nearby 우선 시도, 실패하면 목업으로 화면을 계속 채운다
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
+
+    fetch(`/api/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`)
+      .then((res) => (res.ok ? (res.json() as Promise<NearbyResponse>) : Promise.reject(res.status)))
+      .then((data) => {
+        if (cancelled) return;
+        setClinics(data.items);
+        if (data.error) setNotice(data.error);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // 백엔드(/api/nearby) 준비 전이거나 실패 — 목업으로 화면을 계속 보여준다
+        setClinics(MOCK_CLINICS);
+        setNotice('실시간 데이터를 불러오지 못해 예시 데이터를 보여드립니다.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
+
+  // 병원 선택 시 경로 조회: /api/route 우선 시도, 실패하면 직선 경로로 대체
+  const handleSelect = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      if (!userLocation) return;
+      const clinic = clinics.find((c) => c.id === id);
+      if (!clinic) return;
+
+      fetch(`/api/route?sx=${userLocation.lng}&sy=${userLocation.lat}&ex=${clinic.lng}&ey=${clinic.lat}`)
+        .then((res) => (res.ok ? (res.json() as Promise<RouteResponse>) : Promise.reject(res.status)))
+        .then((data) => setRoutePath(data.path))
+        .catch(() => {
+          // 경로 API 준비 전이거나 실패 — 출발/도착 직선으로 대체
+          setRoutePath([
+            [userLocation.lng, userLocation.lat],
+            [clinic.lng, clinic.lat],
+          ]);
+        });
+    },
+    [userLocation, clinics]
+  );
+
+  const handleClose = useCallback(() => {
+    setSelectedId(null);
+    setRoutePath(null);
+  }, []);
+
+  const selectedClinic = clinics.find((c) => c.id === selectedId) ?? null;
+  const isFastestOverall = clinics.length > 0 && clinics[0].id === selectedId;
+
+  if (!userLocation) {
+    return (
+      <div className="flex h-dvh w-full items-center justify-center bg-neutral-100 text-sm text-neutral-400">
+        위치 확인 중...
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="relative h-dvh w-full overflow-hidden">
+      <HospitalMap
+        userLocation={userLocation}
+        clinics={clinics}
+        selectedId={selectedId}
+        routePath={routePath}
+        onSelect={handleSelect}
+      />
+
+      <div className="absolute left-3 top-3 z-20">
+        <Legend />
+      </div>
+
+      {loading && (
+        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-xs text-neutral-500 shadow-lg">
+          주변 소아과를 찾는 중...
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      )}
+
+      {!loading && clinics.length === 0 && (
+        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-xs text-neutral-500 shadow-lg">
+          반경 60km 내 소아과가 없습니다.
         </div>
-      </main>
+      )}
+
+      {!loading && notice && (
+        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-neutral-900/85 px-4 py-2 text-xs text-white shadow-lg">
+          {notice}
+        </div>
+      )}
+
+      {selectedClinic && (
+        <div className="absolute inset-x-0 bottom-0 z-30 md:bottom-4 md:left-4 md:right-auto md:w-96">
+          <HospitalSheet
+            clinic={selectedClinic}
+            isFastestOverall={isFastestOverall}
+            onClose={handleClose}
+          />
+        </div>
+      )}
     </div>
   );
 }
