@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# 개인 담당 표시 (팀원마다 다름)
+.myrole
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
