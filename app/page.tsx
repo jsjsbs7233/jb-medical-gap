@@ -32,7 +32,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [filter, setFilter] = useState<CareFilter>('all');
+  const [filter, setFilter] = useState<CareFilter>('general');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(true);

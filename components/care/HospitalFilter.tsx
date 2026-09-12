@@ -1,7 +1,6 @@
 import type { CareFilter } from '@/lib/careTypes';
 
 const OPTIONS: { key: CareFilter; label: string }[] = [
-  { key: 'all', label: '전체' },
   { key: 'general', label: '소아 진료 가능' },
   { key: 'specialist', label: '전문의 진료' },
   { key: 'emergency', label: '응급실' },

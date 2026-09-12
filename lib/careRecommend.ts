@@ -33,15 +33,14 @@ export function isOutsideJeonbuk(region: string): boolean {
   return !sido.startsWith('전북') && !sido.startsWith('전라북도');
 }
 
-/** 지도 마커/목록 필터링 — "전체 / 소아 진료 가능 / 전문의 진료 / 응급실" */
+/** 지도 마커/목록 필터링 — "소아 진료 가능 / 전문의 진료 / 응급실" */
 export function filterByCareType(
   hospitals: HospitalCareInfo[],
   filter: CareFilter
 ): HospitalCareInfo[] {
   if (filter === 'general') return hospitals.filter((h) => h.acceptsPediatricPatients);
   if (filter === 'specialist') return hospitals.filter((h) => h.hasPediatricSpecialist);
-  if (filter === 'emergency') return hospitals.filter((h) => h.hasEmergencyRoom);
-  return hospitals;
+  return hospitals.filter((h) => h.hasEmergencyRoom);
 }
 
 /** "응급실" 필터일 때 좌측 패널 상단에 보여줄 합계 요약. */

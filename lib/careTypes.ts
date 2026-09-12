@@ -54,4 +54,4 @@ export interface HospitalCareInfo {
   recommendationReason: string | null;
 }
 
-export type CareFilter = 'all' | 'general' | 'specialist' | 'emergency';
+export type CareFilter = 'general' | 'specialist' | 'emergency';
