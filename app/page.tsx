@@ -273,7 +273,7 @@ export default function Home() {
         onToggleMobile={() => setMobileExpanded((v) => !v)}
       />
 
-      <div className="absolute bottom-6 left-4 z-20 hidden md:block">
+      <div className="absolute bottom-6 right-4 z-20 hidden md:block">
         <CareLegend />
       </div>
 
