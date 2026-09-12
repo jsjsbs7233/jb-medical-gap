@@ -39,7 +39,8 @@ const CENTERS = [
   { name: '순천', lat: 34.9506, lng: 127.4872 },
 ];
 
-export async function GET() {
+// CLAUDE.md §5 계약은 POST. 브라우저 주소창으로 수동 호출하기 편하도록 GET도 같이 열어둔다.
+async function sync() {
   const seen = new Map<string, RawClinic>();
   const report: Record<string, number> = {};
 
@@ -73,3 +74,6 @@ export async function GET() {
 
   return NextResponse.json({ inserted, total: items.length, bySido });
 }
+
+export const POST = sync;
+export const GET = sync;
