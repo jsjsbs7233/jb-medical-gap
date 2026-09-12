@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchAround, type RawClinic } from '@/lib/hira';
 import { getSupabaseServiceClient } from '@/lib/supabase';
 
-export const maxDuration = 60;   // 시간이 걸리는 작업이라 늘려둔다
+export const maxDuration = 120;   // 중심점 19개로 늘어나서 여유 있게 잡는다
 
 const CHUNK_SIZE = 500;   // 한 번에 다 넣지 않고 잘라서 upsert
 
@@ -37,6 +37,12 @@ const CENTERS = [
   { name: '대전', lat: 36.3504, lng: 127.3845 },
   { name: '광주', lat: 35.1595, lng: 126.8526 },
   { name: '순천', lat: 34.9506, lng: 127.4872 },
+  { name: '함양', lat: 35.5205, lng: 127.7250 },
+  { name: '거창', lat: 35.6867, lng: 127.9095 },
+  { name: '영동', lat: 36.1750, lng: 127.7764 },
+  { name: '옥천', lat: 36.3064, lng: 127.5714 },
+  { name: '담양', lat: 35.3211, lng: 126.9881 },
+  { name: '장성', lat: 35.3018, lng: 126.7889 },
 ];
 
 // CLAUDE.md §5 계약은 POST. 브라우저 주소창으로 수동 호출하기 편하도록 GET도 같이 열어둔다.
