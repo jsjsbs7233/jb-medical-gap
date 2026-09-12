@@ -8,24 +8,32 @@ import type { Grade } from './types';
 /**
  * times: 후보들의 소요시간(분 또는 초, 단위는 무관하고 상대비교만 함).
  * 반환값은 입력과 같은 순서 — 하위 34% = FAST, 중위 33% = NORMAL, 상위 33% = SLOW.
+ *
+ * 값이 같은 후보는 반드시 같은 등급을 받는다 — 인덱스 순서로만 순위를 매기면
+ * "30분짜리 두 곳 중 하나는 FAST, 하나는 NORMAL"처럼 같은 시간인데 색이 갈리는
+ * 버그가 생긴다(실제 데모 데이터에서 발견됨). 동일한 값끼리는 평균 순위를 써서
+ * 같은 백분위 → 같은 등급이 되도록 한다.
  */
 export function gradeByRank(times: number[]): Grade[] {
   const n = times.length;
   if (n === 0) return [];
 
-  const order = times
-    .map((t, i) => ({ t, i }))
-    .sort((a, b) => a.t - b.t);
+  const sorted = [...times].sort((a, b) => a - b);
+  const avgPercentileByValue = new Map<number, number>();
+  for (let i = 0; i < n; ) {
+    let j = i;
+    while (j < n && sorted[j] === sorted[i]) j++;
+    const avgRank = (i + j - 1) / 2; // 동일 구간[i, j)의 평균 순위
+    avgPercentileByValue.set(sorted[i], avgRank / n);
+    i = j;
+  }
 
-  const grades: Grade[] = new Array(n);
-  order.forEach(({ i }, rank) => {
-    const percentile = rank / n; // 0(가장 빠름) ~ 1(가장 느림)
-    if (percentile < 0.34) grades[i] = 'FAST';
-    else if (percentile < 0.67) grades[i] = 'NORMAL';
-    else grades[i] = 'SLOW';
+  return times.map((t) => {
+    const percentile = avgPercentileByValue.get(t)!;
+    if (percentile < 0.34) return 'FAST';
+    if (percentile < 0.67) return 'NORMAL';
+    return 'SLOW';
   });
-
-  return grades;
 }
 
 /**
