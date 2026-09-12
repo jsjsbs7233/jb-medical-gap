@@ -16,6 +16,7 @@ export interface RawClinic {
   tel: string | null;
   lat: number;
   lng: number;
+  specialistDoctorCount: number; // mdeptSdrCnt(의과 전문의 총원) — 병원 전체 기준, 과목별 구분 아님
 }
 
 /** 심평원 sidoCdNm은 '전북', '전남광주' 같은 축약형이라 표시용으로 못 쓴다.
@@ -70,6 +71,7 @@ async function fetchPage(center: { lat: number; lng: number }, radiusM: number, 
         tel: it.telno ? String(it.telno) : null,
         lng: Number(it.XPos),   // X = 경도
         lat: Number(it.YPos),   // Y = 위도
+        specialistDoctorCount: Number(it.mdeptSdrCnt ?? 0),
       };
     });
 

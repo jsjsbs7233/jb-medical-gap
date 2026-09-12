@@ -1,0 +1,166 @@
+'use client';
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- Tmap JS SDK(window.Tmapv2)는 공식 타입 정의가 없다 */
+
+import { useEffect, useRef, useState } from 'react';
+import type { HospitalCareInfo } from '@/lib/careTypes';
+import { careMarkerIcon, userMarkerIcon, ROUTE_COLOR } from '../markerIcon';
+
+declare global {
+  interface Window {
+    Tmapv2: any;
+  }
+}
+
+function waitForTmap(timeoutMs = 8000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if (window.Tmapv2) {
+      resolve(window.Tmapv2);
+      return;
+    }
+    const start = Date.now();
+    const timer = setInterval(() => {
+      if (window.Tmapv2) {
+        clearInterval(timer);
+        resolve(window.Tmapv2);
+      } else if (Date.now() - start > timeoutMs) {
+        clearInterval(timer);
+        reject(new Error('TMAP_LOAD_TIMEOUT'));
+      }
+    }, 50);
+  });
+}
+
+interface Props {
+  userLocation: { lat: number; lng: number };
+  hospitals: HospitalCareInfo[]; // 이미 필터가 적용된 목록
+  selectedId: string | null;
+  recommendedGeneralId: string | null;
+  recommendedSpecialistId: string | null;
+  routePath: [number, number][] | null; // [lng, lat][] — /api/route의 실제 경로선
+  onSelect: (id: string) => void;
+}
+
+/**
+ * "가까운 소아 진료 / 가장 가까운 소아 전문진료" UI 전용 지도.
+ * 기존 components/HospitalMap.tsx(등급 기반 단일 리스트 UI, app/live)는 그대로 두고
+ * 이 화면은 별도 컴포넌트로 분리했다. hospitals는 실제 /api/nearby 데이터
+ * (app/page.tsx에서 HospitalCareInfo로 변환) 또는 실패 시 mock으로 채워진다.
+ */
+export default function CareMap({
+  userLocation,
+  hospitals,
+  selectedId,
+  recommendedGeneralId,
+  recommendedSpecialistId,
+  routePath,
+  onSelect,
+}: Props) {
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
+  const polylineRef = useRef<any>(null);
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    waitForTmap()
+      .then((Tmapv2) => {
+        if (cancelled || !mapDivRef.current) return;
+        const map = new Tmapv2.Map(mapDivRef.current, {
+          center: new Tmapv2.LatLng(userLocation.lat, userLocation.lng),
+          width: '100%',
+          height: '100%',
+          zoom: 10,
+        });
+        mapRef.current = map;
+
+        const icon = userMarkerIcon();
+        userMarkerRef.current = new Tmapv2.Marker({
+          position: new Tmapv2.LatLng(userLocation.lat, userLocation.lng),
+          icon: icon.uri,
+          iconSize: new Tmapv2.Size(icon.size, icon.size),
+          map,
+          zIndex: 1000,
+        });
+
+        setReady(true);
+      })
+      .catch(() => setLoadError(true));
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!ready || !window.Tmapv2 || !mapRef.current) return;
+    const Tmapv2 = window.Tmapv2;
+    const map = mapRef.current;
+
+    markersRef.current.forEach((m) => m.setMap(null));
+    markersRef.current = [];
+
+    hospitals.forEach((h) => {
+      const isSelected = h.id === selectedId;
+      const isRecommended = h.id === recommendedGeneralId || h.id === recommendedSpecialistId;
+      // 마커 색은 병원 종류가 아니라 실시간 교통(이동시간 등급)을 나타낸다.
+      const { uri, size } = careMarkerIcon(h.grade, h.travelTime, {
+        selected: isSelected,
+        recommended: isRecommended,
+      });
+
+      const marker = new Tmapv2.Marker({
+        position: new Tmapv2.LatLng(h.latitude, h.longitude),
+        icon: uri,
+        iconSize: new Tmapv2.Size(size, size),
+        map,
+        zIndex: isSelected ? 999 : isRecommended ? 500 : 100,
+      });
+
+      marker.addListener('click', () => onSelect(h.id));
+      markersRef.current.push(marker);
+    });
+  }, [hospitals, selectedId, recommendedGeneralId, recommendedSpecialistId, ready, onSelect]);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current || !selectedId) return;
+    const hospital = hospitals.find((h) => h.id === selectedId);
+    if (!hospital || !window.Tmapv2) return;
+    mapRef.current.setCenter(new window.Tmapv2.LatLng(hospital.latitude, hospital.longitude));
+  }, [selectedId, hospitals, ready]);
+
+  useEffect(() => {
+    if (!ready || !mapRef.current || !window.Tmapv2) return;
+    const Tmapv2 = window.Tmapv2;
+
+    if (polylineRef.current) {
+      polylineRef.current.setMap(null);
+      polylineRef.current = null;
+    }
+    if (!routePath || routePath.length === 0) return;
+
+    const path = routePath.map(([lng, latVal]) => new Tmapv2.LatLng(latVal, lng));
+    polylineRef.current = new Tmapv2.Polyline({
+      path,
+      strokeColor: ROUTE_COLOR,
+      strokeWeight: 5,
+      strokeOpacity: 0.9,
+      map: mapRef.current,
+    });
+  }, [routePath, ready]);
+
+  return (
+    <div className="absolute inset-0 h-full w-full bg-neutral-100">
+      <div ref={mapDivRef} className="h-full w-full [&>div]:h-full [&>div]:w-full" />
+      {!ready && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-100 px-6 text-center text-sm text-neutral-400">
+          {loadError ? 'Tmap 지도를 불러오지 못했습니다.' : '지도를 불러오는 중...'}
+        </div>
+      )}
+    </div>
+  );
+}
