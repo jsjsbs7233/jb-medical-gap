@@ -1,7 +1,8 @@
 // 건강보험심사평가원 "의료기관별상세정보서비스" — 의료장비정보(getMedicalEquipmentInfoList).
 //
 // ⚠ 이 서비스는 병원정보서비스(lib/hira.ts, DATA_GO_KR_KEY)와는 다른 별도 API
-//   상품이라 서비스키가 다르다(DATA_GO_KR_DETAIL_KEY). 오퍼레이션 이름은
+//   상품이라 서비스키가 다르다(DATA_GO_KR_DETAIL_KEY — 반드시 "디코딩" 키를
+//   넣을 것. URLSearchParams가 알아서 인코딩해준다). 오퍼레이션 이름은
 //   opendata.hira.or.kr에서 확인했지만, 정확한 요청 경로(BASE)는 아직 실제로
 //   검증하지 못했다 — 여러 후보로 테스트했는데 전부 NO_OPENAPI_SERVICE_ERROR였다.
 //   data.go.kr 마이페이지의 "활용신청 상세 > OpenAPI 개발가이드"에 있는 실제
@@ -20,14 +21,6 @@ export interface EquipmentInfo {
   count: number;
 }
 
-function getServiceKey(): string | null {
-  const key = process.env.DATA_GO_KR_DETAIL_KEY;
-  if (!key) return null;
-  // 이미 퍼센트 인코딩된 키(%3D 등 포함)라면 그대로 쓰고, URLSearchParams에
-  // 태우면 이중 인코딩(%3D -> %253D)되어 인증이 깨지므로 별도로 처리한다.
-  return key;
-}
-
 function normalizeItems(json: unknown): Record<string, unknown>[] {
   const body = (json as { response?: { body?: { items?: unknown } } })?.response?.body;
   const items = body?.items;
@@ -42,18 +35,21 @@ function normalizeItems(json: unknown): Record<string, unknown>[] {
  * 실패해도 절대 throw하지 않는다 — 빈 배열을 반환하고 화면은 계속 정상 동작한다.
  */
 export async function fetchEquipmentInfo(ykiho: string): Promise<EquipmentInfo[]> {
-  const key = getServiceKey();
+  const key = process.env.DATA_GO_KR_DETAIL_KEY;
   if (!key) return [];
 
   try {
-    const otherParams = new URLSearchParams({
+    // 디코딩키를 URLSearchParams에 맡긴다 — 인코딩키를 직접 문자열로 붙이는 것보다
+    // 이 방식이 표준적이고 실수(이중 인코딩 등)가 적다.
+    const qs = new URLSearchParams({
+      serviceKey: key,
       pageNo: '1',
       numOfRows: '50',
       _type: 'json',
       ykiho,
-    }).toString();
+    });
 
-    const res = await fetch(`${BASE}?serviceKey=${key}&${otherParams}`, {
+    const res = await fetch(`${BASE}?${qs.toString()}`, {
       signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return [];
