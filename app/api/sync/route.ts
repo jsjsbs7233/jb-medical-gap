@@ -1,7 +1,26 @@
 import { NextResponse } from 'next/server';
 import { fetchAround, type RawClinic } from '@/lib/hira';
+import { getSupabaseServiceClient } from '@/lib/supabase';
 
 export const maxDuration = 60;   // 시간이 걸리는 작업이라 늘려둔다
+
+const CHUNK_SIZE = 500;   // 한 번에 다 넣지 않고 잘라서 upsert
+
+function toRow(c: RawClinic) {
+  return {
+    id: c.id,
+    name: c.name,
+    cl_name: c.clName,
+    sido: c.sido,
+    sido_raw: c.sidoRaw,
+    sigungu: c.sigungu,
+    is_jeonbuk: c.isJeonbuk,
+    addr: c.addr,
+    tel: c.tel,
+    lat: c.lat,
+    lng: c.lng,
+  };
+}
 
 /** 전북 + 인접 권역을 덮는 중심점들. 경계를 넘는 게 이 프로젝트의 핵심이다 */
 const CENTERS = [
@@ -40,5 +59,17 @@ export async function GET() {
   const bySido: Record<string, number> = {};
   items.forEach(x => { bySido[x.sido] = (bySido[x.sido] ?? 0) + 1; });
 
-  return NextResponse.json({ total: items.length, bySido, report, items });
+  // Supabase에 500건씩 잘라서 upsert. 한 청크가 실패해도 나머지는 계속 넣는다
+  const supabase = getSupabaseServiceClient();
+  let inserted = 0;
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE).map(toRow);
+    const { error } = await supabase
+      .from('clinics')
+      .upsert(chunk, { onConflict: 'id' });
+
+    if (!error) inserted += chunk.length;
+  }
+
+  return NextResponse.json({ inserted, total: items.length, bySido });
 }
