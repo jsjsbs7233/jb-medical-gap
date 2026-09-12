@@ -1,140 +1,82 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import type { Clinic, NearbyResponse, RouteResponse } from '@/lib/types';
-import { MOCK_CLINICS, FALLBACK_LOCATION } from '@/lib/mock';
-import HospitalMap from '@/components/HospitalMap';
-import HospitalSheet from '@/components/HospitalSheet';
-import Legend from '@/components/Legend';
+// 소아 진료 / 소아 전문진료 두 트랙 추천 UI — 지금은 mock 데이터로만 구현.
+// (실제 /api/nearby 연동 화면은 app/live/page.tsx 로 옮겨뒀다. 나중에 이 화면에
+// 실제 데이터를 연결하려면 lib/careTypes.ts의 필드를 /api/nearby 응답에 추가하는
+// 작업이 필요한데, 그건 팀 공용 계약(lib/types.ts)을 바꾸는 일이라 먼저 공유해야 한다.)
+
+import { useCallback, useMemo, useState } from 'react';
+import type { CareFilter } from '@/lib/careTypes';
+import { MOCK_CARE_HOSPITALS, MOCK_USER_LOCATION } from '@/lib/careMock';
+import { filterByCareType, pickNearestAccepting, pickNearestSpecialist } from '@/lib/careRecommend';
+import CareMap from '@/components/care/CareMap';
+import CareLegend from '@/components/care/CareLegend';
+import RecommendationPanel from '@/components/care/RecommendationPanel';
+import HospitalPopup from '@/components/care/HospitalPopup';
 
 export default function Home() {
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [clinics, setClinics] = useState<Clinic[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [filter, setFilter] = useState<CareFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
+  const [routeTargetId, setRouteTargetId] = useState<string | null>(null);
+  const [mobileExpanded, setMobileExpanded] = useState(true);
 
-  // 위치 권한 요청, 실패하면 전주 좌표로 폴백
-  useEffect(() => {
-    if (!('geolocation' in navigator)) {
-      // setState는 콜백 안에서 — react-hooks/set-state-in-effect
-      queueMicrotask(() => setUserLocation(FALLBACK_LOCATION));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setUserLocation(FALLBACK_LOCATION),
-      { timeout: 5000 }
-    );
+  const nearestGeneral = useMemo(() => pickNearestAccepting(MOCK_CARE_HOSPITALS), []);
+  const nearestSpecialist = useMemo(() => pickNearestSpecialist(MOCK_CARE_HOSPITALS), []);
+  const mapHospitals = useMemo(() => filterByCareType(MOCK_CARE_HOSPITALS, filter), [filter]);
+
+  const selectedHospital = MOCK_CARE_HOSPITALS.find((h) => h.id === selectedId) ?? null;
+  const routeTarget = MOCK_CARE_HOSPITALS.find((h) => h.id === routeTargetId) ?? null;
+
+  const handleDetail = useCallback((id: string) => {
+    setSelectedId(id);
+    setRouteTargetId(null);
   }, []);
 
-  // 주변 소아과 목록: /api/nearby 우선 시도, 실패하면 목업으로 화면을 계속 채운다
-  useEffect(() => {
-    if (!userLocation) return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) setLoading(true);
-    });
-
-    fetch(`/api/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`)
-      .then((res) => (res.ok ? (res.json() as Promise<NearbyResponse>) : Promise.reject(res.status)))
-      .then((data) => {
-        if (cancelled) return;
-        setClinics(data.items);
-        if (data.error) setNotice(data.error);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // 백엔드(/api/nearby) 준비 전이거나 실패 — 목업으로 화면을 계속 보여준다
-        setClinics(MOCK_CLINICS);
-        setNotice('실시간 데이터를 불러오지 못해 예시 데이터를 보여드립니다.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userLocation]);
-
-  // 병원 선택 시 경로 조회: /api/route 우선 시도, 실패하면 직선 경로로 대체
-  const handleSelect = useCallback(
-    (id: string) => {
-      setSelectedId(id);
-      if (!userLocation) return;
-      const clinic = clinics.find((c) => c.id === id);
-      if (!clinic) return;
-
-      fetch(`/api/route?sx=${userLocation.lng}&sy=${userLocation.lat}&ex=${clinic.lng}&ey=${clinic.lat}`)
-        .then((res) => (res.ok ? (res.json() as Promise<RouteResponse>) : Promise.reject(res.status)))
-        .then((data) => setRoutePath(data.path))
-        .catch(() => {
-          // 경로 API 준비 전이거나 실패 — 출발/도착 직선으로 대체
-          setRoutePath([
-            [userLocation.lng, userLocation.lat],
-            [clinic.lng, clinic.lat],
-          ]);
-        });
-    },
-    [userLocation, clinics]
-  );
-
-  const handleClose = useCallback(() => {
-    setSelectedId(null);
-    setRoutePath(null);
+  const handleDirections = useCallback((id: string) => {
+    setSelectedId(id);
+    setRouteTargetId(id);
   }, []);
 
-  const selectedClinic = clinics.find((c) => c.id === selectedId) ?? null;
-  const isFastestOverall = clinics.length > 0 && clinics[0].id === selectedId;
-
-  if (!userLocation) {
-    return (
-      <div className="flex h-dvh w-full items-center justify-center bg-neutral-100 text-sm text-neutral-400">
-        위치 확인 중...
-      </div>
-    );
-  }
+  const handleClosePopup = useCallback(() => setSelectedId(null), []);
 
   return (
     <div className="relative h-dvh w-full overflow-hidden">
-      <HospitalMap
-        userLocation={userLocation}
-        clinics={clinics}
+      <CareMap
+        userLocation={{ lat: MOCK_USER_LOCATION.lat, lng: MOCK_USER_LOCATION.lng }}
+        hospitals={mapHospitals}
         selectedId={selectedId}
-        routePath={routePath}
-        onSelect={handleSelect}
+        recommendedGeneralId={nearestGeneral?.id ?? null}
+        recommendedSpecialistId={nearestSpecialist?.id ?? null}
+        routeTarget={routeTarget}
+        onSelect={(id) => {
+          setSelectedId(id);
+          setRouteTargetId(null);
+        }}
       />
 
-      <div className="absolute left-3 top-3 z-20">
-        <Legend />
+      <RecommendationPanel
+        locationLabel={MOCK_USER_LOCATION.label}
+        filter={filter}
+        onFilterChange={setFilter}
+        nearestGeneral={nearestGeneral}
+        nearestSpecialist={nearestSpecialist}
+        onDetail={handleDetail}
+        onDirections={handleDirections}
+        mobileExpanded={mobileExpanded}
+        onToggleMobile={() => setMobileExpanded((v) => !v)}
+      />
+
+      <div className="absolute bottom-6 left-4 z-20 hidden md:block">
+        <CareLegend />
       </div>
 
-      {loading && (
-        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-xs text-neutral-500 shadow-lg">
-          주변 소아과를 찾는 중...
-        </div>
-      )}
-
-      {!loading && clinics.length === 0 && (
-        <div className="absolute left-1/2 top-3 z-20 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-xs text-neutral-500 shadow-lg">
-          반경 60km 내 소아과가 없습니다.
-        </div>
-      )}
-
-      {!loading && notice && (
-        <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-neutral-900/85 px-4 py-2 text-xs text-white shadow-lg">
-          {notice}
-        </div>
-      )}
-
-      {selectedClinic && (
-        <div className="absolute inset-x-0 bottom-0 z-30 md:bottom-4 md:left-4 md:right-auto md:w-96">
-          <HospitalSheet
-            clinic={selectedClinic}
-            isFastestOverall={isFastestOverall}
-            onClose={handleClose}
+      {selectedHospital && !routeTarget && (
+        <div className="absolute bottom-28 left-1/2 z-30 -translate-x-1/2 md:bottom-6 md:left-[27rem] md:translate-x-0">
+          <HospitalPopup
+            hospital={selectedHospital}
+            onClose={handleClosePopup}
+            onDetail={handleDetail}
+            onDirections={handleDirections}
           />
         </div>
       )}
