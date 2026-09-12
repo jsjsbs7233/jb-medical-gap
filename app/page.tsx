@@ -8,7 +8,12 @@ import type { NearbyResponse, RouteResponse } from '@/lib/types';
 import { FALLBACK_LOCATION } from '@/lib/mock';
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { MOCK_CARE_HOSPITALS } from '@/lib/careMock';
-import { clinicToCareInfo, applyEmergencyInfo, erHospitalToCareInfo } from '@/lib/careAdapt';
+import {
+  clinicToCareInfo,
+  applyEmergencyInfo,
+  erHospitalToCareInfo,
+  enrichErWithPediatricInfo,
+} from '@/lib/careAdapt';
 import {
   filterByCareType,
   pickNearestAccepting,
@@ -169,9 +174,15 @@ export default function Home() {
 
   const nearestGeneral = useMemo(() => pickNearestAccepting(hospitals), [hospitals]);
   const nearestSpecialist = useMemo(() => pickNearestSpecialist(hospitals), [hospitals]);
-  // "응급실" 필터는 소아과 후보가 아니라 반경 100km 내 전체 응급실 데이터를 쓴다.
+  // "응급실" 필터는 소아과 후보가 아니라 반경 내 전체 응급실 데이터를 쓴다.
+  // 다만 같은 병원이 소아과 후보 목록에도 있으면(예: 진안군의료원) 그쪽의 실측
+  // 소아청소년과 전문의 정보를 가져와 채운다 — 안 그러면 카드/목록에서 같은
+  // 병원의 "전문의 있음/없음" 표시가 서로 어긋난다.
   const mapHospitals = useMemo(
-    () => (filter === 'emergency' ? emergencyHospitals : filterByCareType(hospitals, filter)),
+    () =>
+      filter === 'emergency'
+        ? enrichErWithPediatricInfo(emergencyHospitals, hospitals)
+        : filterByCareType(hospitals, filter),
     [hospitals, filter, emergencyHospitals]
   );
   // 목록은 지도 마커와 달리 "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
@@ -181,19 +192,17 @@ export default function Home() {
     () => (filter === 'emergency' ? mapHospitals : sortForList(mapHospitals)),
     [mapHospitals, filter]
   );
-  // selectedId는 필터에 따라 hospitals(소아과 후보) 또는 emergencyHospitals(응급실
-  // 전체) 어느 쪽에서 왔을 수 있어서 둘 다 찾아본다.
+  // selectedId는 필터에 따라 hospitals(소아과 후보) 또는 mapHospitals(응급실
+  // 전체, 소아과 정보 보강됨) 어느 쪽에서 왔을 수 있어서 둘 다 찾아본다.
   const selectedHospital =
-    hospitals.find((h) => h.id === selectedId) ??
-    emergencyHospitals.find((h) => h.id === selectedId) ??
-    null;
+    hospitals.find((h) => h.id === selectedId) ?? mapHospitals.find((h) => h.id === selectedId) ?? null;
 
   // 길찾기: /api/route 우선 시도, 실패하면 직선 경로로 대체
   const handleDirections = useCallback(
     (id: string) => {
       setSelectedId(id);
       if (!userLocation) return;
-      const hospital = hospitals.find((h) => h.id === id) ?? emergencyHospitals.find((h) => h.id === id);
+      const hospital = hospitals.find((h) => h.id === id) ?? mapHospitals.find((h) => h.id === id);
       if (!hospital) return;
 
       fetch(
@@ -208,7 +217,7 @@ export default function Home() {
           ]);
         });
     },
-    [userLocation, hospitals, emergencyHospitals]
+    [userLocation, hospitals, mapHospitals]
   );
 
   const handleDetail = useCallback((id: string) => {
