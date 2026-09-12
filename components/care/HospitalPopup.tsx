@@ -29,7 +29,10 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
       if (!cancelled) setEquipment([]);
     });
 
-    fetch(`/api/equipment?ykiho=${encodeURIComponent(hospital.id)}`)
+    // name도 같이 보낸다 — 응급실 목록(국립중앙의료원 hpid 기준)에서 열린
+    // 팝업은 hospital.id가 심평원 ykiho가 아니라 hpid라서, 서버가 name으로
+    // 실제 ykiho를 역으로 찾아 재조회한다.
+    fetch(`/api/equipment?ykiho=${encodeURIComponent(hospital.id)}&name=${encodeURIComponent(hospital.name)}`)
       .then((res) => (res.ok ? res.json() : { items: [] }))
       .then((data) => {
         if (!cancelled) setEquipment(data.items ?? []);
@@ -41,7 +44,7 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
     return () => {
       cancelled = true;
     };
-  }, [hospital.id]);
+  }, [hospital.id, hospital.name]);
 
   return (
     <div className="w-[19rem] rounded-2xl bg-white p-4 shadow-2xl">
