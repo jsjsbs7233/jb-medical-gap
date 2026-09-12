@@ -1,19 +1,14 @@
-// 건강보험심사평가원 "의료기관별상세정보서비스" — 의료장비정보(getMedicalEquipmentInfoList).
+// 건강보험심사평가원 "의료기관별상세정보서비스" — 의료장비정보(getMedOftInfo2.8).
 //
-// ⚠ 이 서비스는 병원정보서비스(lib/hira.ts, DATA_GO_KR_KEY)와는 다른 별도 API
-//   상품이라 서비스키가 다르다(DATA_GO_KR_DETAIL_KEY — 반드시 "디코딩" 키를
-//   넣을 것. URLSearchParams가 알아서 인코딩해준다). 오퍼레이션 이름은
-//   opendata.hira.or.kr에서 확인했지만, 정확한 요청 경로(BASE)는 아직 실제로
-//   검증하지 못했다 — 여러 후보로 테스트했는데 전부 NO_OPENAPI_SERVICE_ERROR였다.
-//   data.go.kr 마이페이지의 "활용신청 상세 > OpenAPI 개발가이드"에 있는 실제
-//   샘플 요청 URL을 보고 아래 BASE 상수만 맞는 값으로 고치면 된다.
-//   (경로가 틀려도 이 함수는 절대 throw하지 않고 빈 배열을 반환한다 — 화면은
-//   장비 정보 없이 계속 정상 동작한다.)
+// 이 서비스는 병원정보서비스(lib/hira.ts, DATA_GO_KR_KEY)와는 다른 별도 API
+// 상품이라 서비스키가 다르다(DATA_GO_KR_DETAIL_KEY, 디코딩키).
 //
-// ⚠ 응답 필드명(equmCd/equmNm/equmCnt)도 실제로 성공 응답을 받아본 적이 없어
-//   추정치다. BASE를 고친 뒤 첫 호출 결과를 콘솔에 찍어서 반드시 확인할 것.
-
-const BASE = 'https://apis.data.go.kr/B551182/MadmDtlInfoService2/getMedicalEquipmentInfoList';
+// ✅ BASE/오퍼레이션 이름 모두 실제 호출로 검증 완료 (2026-09-13).
+//   data.go.kr에 문서화된 이름(getMedicalEquipmentInfoList 등)과 실제 등록된
+//   이름이 달랐다 — "MadmDtlInfoService2.8" / "getMedOftInfo2.8"가 진짜 이름이고,
+//   끝의 ".8"은 오타가 아니라 실제 서비스/오퍼레이션 이름의 일부였다.
+//   응답 필드도 문서 추정치(equmCd 등)가 아니라 실제로는 oftCd/oftCdNm/oftCnt였다.
+const BASE = 'https://apis.data.go.kr/B551182/MadmDtlInfoService2.8/getMedOftInfo2.8';
 
 export interface EquipmentInfo {
   code: string;
@@ -39,8 +34,6 @@ export async function fetchEquipmentInfo(ykiho: string): Promise<EquipmentInfo[]
   if (!key) return [];
 
   try {
-    // 디코딩키를 URLSearchParams에 맡긴다 — 인코딩키를 직접 문자열로 붙이는 것보다
-    // 이 방식이 표준적이고 실수(이중 인코딩 등)가 적다.
     const qs = new URLSearchParams({
       serviceKey: key,
       pageNo: '1',
@@ -59,9 +52,9 @@ export async function fetchEquipmentInfo(ykiho: string): Promise<EquipmentInfo[]
     if (header?.resultCode !== '00') return [];
 
     return normalizeItems(json).map((it) => ({
-      code: String(it.equmCd ?? ''),
-      name: String(it.equmNm ?? ''),
-      count: Number(it.equmCnt ?? 0),
+      code: String(it.oftCd ?? ''),
+      name: String(it.oftCdNm ?? ''),
+      count: Number(it.oftCnt ?? 0),
     }));
   } catch {
     return [];

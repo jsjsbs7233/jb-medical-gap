@@ -48,9 +48,27 @@ export const TRAFFIC_MARKER_COLOR: Record<Grade, string> = {
   SLOW: '#DC2626',
 };
 
+// 아기 얼굴(소아청소년과 전문의) / 병원 건물(일반 소아 진료) 아이콘.
+// 44 기준 좌표로 그려두고 실제 마커 크기에 맞춰 scale()로 늘리고 줄인다 —
+// 크기별로 좌표를 다시 계산할 필요가 없어서 훨씬 간단하다.
+const BABY_FACE_ICON = `
+  <circle cx="0" cy="1" r="11" fill="none" stroke="#ffffff" stroke-width="2.2" />
+  <path d="M -3 -11 Q 1 -16 5 -12 Q 6.5 -9 3 -8" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+  <circle cx="-4" cy="1" r="1.5" fill="#ffffff" />
+  <circle cx="4" cy="1" r="1.5" fill="#ffffff" />
+  <path d="M -4.5 5 Q 0 8.5 4.5 5" fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" />
+`;
+
+const HOSPITAL_ICON = `
+  <rect x="-9" y="-2" width="18" height="12" rx="1" fill="none" stroke="#ffffff" stroke-width="2.1" />
+  <rect x="-4.5" y="-11" width="9" height="9" rx="1" fill="none" stroke="#ffffff" stroke-width="2" />
+  <path d="M 0 -8.5 V -3.5 M -2.5 -6 H 2.5" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" />
+  <rect x="-2" y="4" width="4" height="6" fill="#ffffff" />
+`;
+
 export function careMarkerIcon(
   grade: Grade,
-  minutes: number,
+  kind: 'general' | 'specialist',
   opts: { selected?: boolean; recommended?: boolean } = {}
 ) {
   const { selected = false, recommended = false } = opts;
@@ -59,6 +77,7 @@ export function careMarkerIcon(
   const cx = size / 2;
   const cy = size / 2;
   const color = TRAFFIC_MARKER_COLOR[grade];
+  const scale = size / 44;
 
   const badge = recommended
     ? `<circle cx="${size - 8}" cy="8" r="8" fill="#F5B300" stroke="#ffffff" stroke-width="2" />
@@ -66,12 +85,14 @@ export function careMarkerIcon(
          font-family="Arial, sans-serif" font-size="10" fill="#ffffff">★</text>`
     : '';
 
+  const icon = kind === 'specialist' ? BABY_FACE_ICON : HOSPITAL_ICON;
+
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="#ffffff" stroke-width="${recommended ? 3.5 : selected ? 3 : 2.5}" />
-      <text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central"
-        font-family="Arial, sans-serif" font-weight="700"
-        font-size="${recommended ? 15 : selected ? 15 : 13}" fill="#ffffff">${minutes}</text>
+      <g transform="translate(${cx} ${cy}) scale(${scale})">
+        ${icon}
+      </g>
       ${badge}
     </svg>`;
 

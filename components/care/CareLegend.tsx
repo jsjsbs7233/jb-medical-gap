@@ -33,8 +33,8 @@ export default function CareLegend() {
         <div className="flex items-center gap-1">⭐ 추천</div>
       </div>
       <p className="mt-1.5 max-w-[220px] text-[10px] leading-snug text-neutral-400">
-        마커 색은 같은 후보 안에서의 상대적인 이동시간입니다. 병원 종류(일반/전문의)는
-        좌측 목록의 점 색으로 구분됩니다.
+        마커 색은 같은 후보 안에서의 상대적인 이동시간입니다. 마커 안 아이콘 —
+        👶 아기 얼굴: 소아청소년과 전문의 / 🏥 건물: 일반 소아 진료.
       </p>
     </div>
   );

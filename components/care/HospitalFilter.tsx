@@ -4,6 +4,7 @@ const OPTIONS: { key: CareFilter; label: string }[] = [
   { key: 'all', label: '전체' },
   { key: 'general', label: '소아 진료 가능' },
   { key: 'specialist', label: '전문의 진료' },
+  { key: 'emergency', label: '응급실' },
 ];
 
 interface Props {
@@ -14,7 +15,7 @@ interface Props {
 /** 지도 마커를 종류별로 강조해서 보는 필터. */
 export default function HospitalFilter({ value, onChange }: Props) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex flex-wrap gap-1.5">
       {OPTIONS.map((opt) => {
         const active = value === opt.key;
         return (

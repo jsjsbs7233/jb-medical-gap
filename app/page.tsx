@@ -8,7 +8,7 @@ import type { NearbyResponse, RouteResponse } from '@/lib/types';
 import { FALLBACK_LOCATION } from '@/lib/mock';
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { MOCK_CARE_HOSPITALS } from '@/lib/careMock';
-import { clinicToCareInfo } from '@/lib/careAdapt';
+import { clinicToCareInfo, applyEmergencyInfo } from '@/lib/careAdapt';
 import {
   filterByCareType,
   pickNearestAccepting,
@@ -54,15 +54,38 @@ export default function Home() {
 
     fetch(`/api/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}`)
       .then((res) => (res.ok ? (res.json() as Promise<NearbyResponse>) : Promise.reject(res.status)))
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
+        let list: HospitalCareInfo[];
         if (data.items.length === 0) {
-          setHospitals(MOCK_CARE_HOSPITALS);
+          list = MOCK_CARE_HOSPITALS;
           setNotice(data.error ?? '반경 내 데이터가 없어 예시 데이터를 보여드립니다.');
-          return;
+        } else {
+          list = data.items.map(clinicToCareInfo);
+          if (data.error) setNotice(data.error);
         }
-        setHospitals(data.items.map(clinicToCareInfo));
-        if (data.error) setNotice(data.error);
+
+        // 응급실 실시간 가용 병상 — 목록에 걸쳐있는 시도를 전부 조회해서 병원명으로
+        // 매칭한다 (전북만 보면 경남 함양 등 인접 지역 병원이 빠진다). 실패해도
+        // 조용히 넘어간다(hasEmergencyRoom이 그냥 안 채워질 뿐).
+        const sidoList = [...new Set(list.map((h) => h.region.split(' ')[0]).filter(Boolean))];
+        if (sidoList.length > 0) {
+          try {
+            const results = await Promise.all(
+              sidoList.map((sido) =>
+                fetch(`/api/emergency/beds?sido=${encodeURIComponent(sido)}`)
+                  .then((res) => (res.ok ? res.json() : { items: [] }))
+                  .catch(() => ({ items: [] }))
+              )
+            );
+            const erItems = results.flatMap((r) => r.items ?? []);
+            if (!cancelled) list = applyEmergencyInfo(list, erItems);
+          } catch {
+            // 응급실 데이터 실패는 무시 — 나머지 화면은 그대로 정상 동작
+          }
+        }
+
+        if (!cancelled) setHospitals(list);
       })
       .catch(() => {
         if (cancelled) return;

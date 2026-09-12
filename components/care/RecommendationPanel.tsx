@@ -1,4 +1,5 @@
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
+import { summarizeEmergencyBeds } from '@/lib/careRecommend';
 import HospitalFilter from './HospitalFilter';
 import PediatricCareCard from './PediatricCareCard';
 import SpecialistCareCard from './SpecialistCareCard';
@@ -60,6 +61,10 @@ export default function RecommendationPanel({
         )}
       </div>
 
+      {filter === 'emergency' && (
+        <EmergencySummary hospitals={hospitals} />
+      )}
+
       <div className="mt-5">
         <p className="mb-2 text-xs font-semibold text-neutral-500">
           주변 병원 목록 ({hospitals.length}곳)
@@ -109,6 +114,22 @@ function EmptyNotice({ text }: { text: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-neutral-200 p-4 text-center text-xs text-neutral-400">
       {text}
+    </div>
+  );
+}
+
+function EmergencySummary({ hospitals }: { hospitals: HospitalCareInfo[] }) {
+  const { hospitalCount, totalAvailableBeds } = summarizeEmergencyBeds(hospitals);
+  return (
+    <div className="mt-4 rounded-2xl bg-red-50 p-3.5">
+      <p className="text-xs font-semibold text-red-700">🚑 응급실 현황</p>
+      <p className="mt-1 text-sm text-red-800">
+        응급실 보유 <span className="font-bold">{hospitalCount}곳</span> · 지금 가용 병상 합계{' '}
+        <span className="font-bold">{totalAvailableBeds}개</span>
+      </p>
+      <p className="mt-1 text-[10px] leading-snug text-red-500">
+        국립중앙의료원 실시간 데이터 기준. 병원명으로 매칭해서 일부 병원은 누락될 수 있습니다.
+      </p>
     </div>
   );
 }

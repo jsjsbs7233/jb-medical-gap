@@ -81,9 +81,21 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
         >
           {hospital.hasPediatricSpecialist ? '✓' : '—'} 소아청소년과 전문의
         </span>
-        {!!hospital.specialistDoctorCount && (
-          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
-            병원 전체 전문의 {hospital.specialistDoctorCount}명
+        {typeof hospital.pediatricSpecialistCount === 'number' ? (
+          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
+            소아청소년과 전문의 {hospital.pediatricSpecialistCount}명
+          </span>
+        ) : (
+          !!hospital.specialistDoctorCount && (
+            <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
+              병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
+            </span>
+          )
+        )}
+        {hospital.hasEmergencyRoom && (
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+            🚑 응급실 가용병상 {hospital.erAvailableBeds}
+            {hospital.erUpdatedAt ? ` (${hospital.erUpdatedAt.slice(11)} 기준)` : ''}
           </span>
         )}
       </div>

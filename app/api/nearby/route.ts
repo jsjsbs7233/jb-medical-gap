@@ -14,7 +14,12 @@ import { fetchAround } from '@/lib/hira';
 import { supabaseServer, type ClinicRow } from '@/lib/supabase';
 import { CANDIDATES, RADIUS_KM, CACHE_SEC, haversineKm, toGridKey, boundingBox } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
-import { isPediatricSpecialistInstitution, isRelevantForPediatricCare } from '@/lib/pediatricSpecialist';
+import {
+  isPediatricSpecialistInstitution,
+  isLikelyPediatricSpecialistCandidate,
+  isRelevantForPediatricCare,
+} from '@/lib/pediatricSpecialist';
+import { fetchPediatricSpecialistCount } from '@/lib/hiraDeptSpecialist';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
@@ -137,9 +142,7 @@ export async function GET(req: NextRequest) {
     // 거리순 후보 안에 전문의 병원이 없을 수 있어(일반의 GP 의원이 훨씬 많음),
     // "가장 가까운 소아 전문진료"가 항상 실제 이동시간을 갖도록 별도로 확보한다.
     const nearestSpecialists = scored
-      .filter((c) =>
-        isPediatricSpecialistInstitution(c.cl_name ?? '', c.name, c.specialist_doctor_count ?? undefined)
-      )
+      .filter((c) => isLikelyPediatricSpecialistCandidate(c.cl_name ?? '', c.name))
       .slice(0, SPECIALIST_CANDIDATES);
 
     const merged = new Map<string, (typeof scored)[number]>();
@@ -159,9 +162,21 @@ export async function GET(req: NextRequest) {
 
     const results = await Promise.all(
       withDistance.map(async (c) => {
-        const hit = await readCache(grid, c.id);
+        // 소아청소년과 전문의 정확한 인원수 — 이동시간 계산과 동시에 병렬로 조회한다.
+        // 실패(null)하면 아래에서 기존 추정 로직으로 대체한다.
+        const [hit, pediatricSpecialistCount] = await Promise.all([
+          readCache(grid, c.id),
+          fetchPediatricSpecialistCount(c.id),
+        ]);
+
         if (hit) {
-          return { clinic: c, totalTime: hit.totalTime, totalDist: hit.totalDist, estimated: false };
+          return {
+            clinic: c,
+            totalTime: hit.totalTime,
+            totalDist: hit.totalDist,
+            estimated: false,
+            pediatricSpecialistCount,
+          };
         }
 
         allFromCache = false;
@@ -174,6 +189,7 @@ export async function GET(req: NextRequest) {
             totalTime: route.totalTime,
             totalDist: route.totalDistance,
             estimated: false,
+            pediatricSpecialistCount,
           };
         }
 
@@ -183,6 +199,7 @@ export async function GET(req: NextRequest) {
           totalTime: (c.distanceKm / FALLBACK_KMH) * 3600,
           totalDist: c.distanceKm * 1000,
           estimated: true,
+          pediatricSpecialistCount,
         };
       })
     );
@@ -206,12 +223,18 @@ export async function GET(req: NextRequest) {
       estimated: r.estimated,
       // dgsbjtCd=11(소아청소년과)로 이미 걸러진 후보라 전부 소아 진료는 가능하다고 본다.
       acceptsPediatricPatients: true,
-      hasPediatricSpecialist: isPediatricSpecialistInstitution(
-        r.clinic.cl_name ?? '',
-        r.clinic.name,
-        r.clinic.specialist_doctor_count ?? undefined
-      ),
+      // 실제 과목별 전문의 수(getDgsbjtInfo2.8)를 확인했으면 그게 정답이고,
+      // 조회 실패(null)했을 때만 상호명/종별 추정 로직으로 대체한다.
+      hasPediatricSpecialist:
+        r.pediatricSpecialistCount !== null
+          ? r.pediatricSpecialistCount > 0
+          : isPediatricSpecialistInstitution(
+              r.clinic.cl_name ?? '',
+              r.clinic.name,
+              r.clinic.specialist_doctor_count ?? undefined
+            ),
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
+      pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
     }));
 
     items.sort((a, b) => a.minutes - b.minutes);

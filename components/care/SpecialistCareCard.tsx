@@ -1,4 +1,5 @@
 import type { HospitalCareInfo } from '@/lib/careTypes';
+import { isOutsideJeonbuk } from '@/lib/careRecommend';
 
 interface Props {
   hospital: HospitalCareInfo;
@@ -9,6 +10,8 @@ interface Props {
 /**
  * "가장 가까운 소아 전문진료" — 서비스의 핵심 추천이라 메인 컬러 테두리 +
  * 별 배지로 구분한다. 다만 과하게 화려하지 않게, 흰 배경 + 얇은 강조 테두리 정도로.
+ * 이 카드가 뜬 병원이 전북 밖이면, 이 프로젝트의 핵심 메시지("전북 밖이지만
+ * 전주보다 빠릅니다")를 배지로 보여준다.
  */
 export default function SpecialistCareCard({ hospital, onDetail, onDirections }: Props) {
   return (
@@ -18,6 +21,12 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
           ⭐ 가장 가까운 소아 전문진료
         </span>
       </div>
+
+      {isOutsideJeonbuk(hospital.region) && (
+        <div className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-xs font-semibold text-amber-700">
+          전북 밖이지만 전주보다 빠릅니다
+        </div>
+      )}
 
       <p className="mt-2 text-[15px] font-semibold text-neutral-900">{hospital.name}</p>
       <p className="text-xs text-neutral-400">{hospital.region}</p>
@@ -46,10 +55,16 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
             🕙 {hospital.closeTime} 진료 종료
           </span>
         )}
-        {!!hospital.specialistDoctorCount && (
-          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
-            병원 전체 전문의 {hospital.specialistDoctorCount}명
+        {typeof hospital.pediatricSpecialistCount === 'number' ? (
+          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
+            소아청소년과 전문의 {hospital.pediatricSpecialistCount}명
           </span>
+        ) : (
+          !!hospital.specialistDoctorCount && (
+            <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
+              병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
+            </span>
+          )
         )}
       </div>
 
