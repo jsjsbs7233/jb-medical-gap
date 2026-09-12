@@ -3,18 +3,25 @@
 
 import type { CareFilter, HospitalCareInfo } from './careTypes';
 
+// 이동시간(분)은 반올림값이라 실제로는 다른 두 병원이 "3분"으로 같이 찍힐 수 있다.
+// 그럴 때 정렬이 안정적이지 않으면(원래 배열 순서에 의존) 더 먼 곳이 뽑힐 수 있어서,
+// 반올림 전이라 더 정밀한 직선거리(km)를 2차 기준으로 둔다.
+function byTravelTimeThenDistance(a: HospitalCareInfo, b: HospitalCareInfo): number {
+  return a.travelTime - b.travelTime || a.distance - b.distance;
+}
+
 /** 소아 환자 진료가 가능한 곳 중 이동시간이 가장 짧은 곳 (전문의 여부 무관) */
 export function pickNearestAccepting(hospitals: HospitalCareInfo[]): HospitalCareInfo | null {
   const candidates = hospitals.filter((h) => h.acceptsPediatricPatients);
   if (candidates.length === 0) return null;
-  return [...candidates].sort((a, b) => a.travelTime - b.travelTime)[0];
+  return [...candidates].sort(byTravelTimeThenDistance)[0];
 }
 
 /** 소아청소년과 전문의가 있는 곳 중 이동시간이 가장 짧은 곳 — 행정구역 제한 없음 */
 export function pickNearestSpecialist(hospitals: HospitalCareInfo[]): HospitalCareInfo | null {
   const candidates = hospitals.filter((h) => h.hasPediatricSpecialist);
   if (candidates.length === 0) return null;
-  return [...candidates].sort((a, b) => a.travelTime - b.travelTime)[0];
+  return [...candidates].sort(byTravelTimeThenDistance)[0];
 }
 
 /**
@@ -61,6 +68,6 @@ export function sortForList(hospitals: HospitalCareInfo[]): HospitalCareInfo[] {
     if (a.hasPediatricSpecialist !== b.hasPediatricSpecialist) {
       return a.hasPediatricSpecialist ? -1 : 1;
     }
-    return a.travelTime - b.travelTime;
+    return byTravelTimeThenDistance(a, b);
   });
 }
