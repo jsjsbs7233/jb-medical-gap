@@ -21,8 +21,11 @@ export interface HospitalCareInfo {
   travelTime: number; // 분
   distance: number; // km
 
-  isOpen: boolean;
-  closeTime: string | null;
+  // 실제 심평원 데이터로는 진료시간을 알 수 없다(상세 API 미승인 + CLAUDE.md도
+  // "진료시간 필터"는 범위에서 제외). 그래서 선택 필드로 두고, 값이 있을 때만
+  // (주로 mock 데이터) 카드에 뱃지를 그린다.
+  isOpen?: boolean;
+  closeTime?: string | null;
 
   acceptsPediatricPatients: boolean; // 소아 환자 진료 가능
   hasPediatricSpecialist: boolean; // 소아청소년과 전문의 보유

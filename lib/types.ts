@@ -18,6 +18,13 @@ export interface Clinic {
   delay: number; // 지연율. 1.0=원활, 1.5=평소의 1.5배
   grade: Grade;
   estimated: boolean; // true면 Tmap 실패로 직선거리 추정치
+
+  // 아래 두 필드는 선택 필드로 추가함(기존 필드는 그대로 — 다른 담당자 코드 안 깨짐).
+  // acceptsPediatricPatients(소아 진료 가능)와 hasPediatricSpecialist(소아청소년과
+  // 전문의)는 절대 같은 의미가 아니다. 지금 /api/nearby가 lib/hira.ts의 clName+병원명으로
+  // 추정해서 채운다 (lib/pediatricSpecialist.ts 참고) — 심평원 상세 API 승인 전까지의 추정치.
+  acceptsPediatricPatients?: boolean;
+  hasPediatricSpecialist?: boolean;
 }
 
 export interface NearbyResponse {

@@ -28,14 +28,16 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <span
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-            hospital.isOpen ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-400'
-          }`}
-        >
-          <span className={`h-1.5 w-1.5 rounded-full ${hospital.isOpen ? 'bg-emerald-500' : 'bg-neutral-300'}`} />
-          {hospital.isOpen ? '현재 진료 가능' : '진료 종료'}
-        </span>
+        {typeof hospital.isOpen === 'boolean' && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+              hospital.isOpen ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-400'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${hospital.isOpen ? 'bg-emerald-500' : 'bg-neutral-300'}`} />
+            {hospital.isOpen ? '현재 진료 가능' : '진료 종료'}
+          </span>
+        )}
         <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
           ✓ 소아청소년과 전문의
         </span>

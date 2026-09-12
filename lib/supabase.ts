@@ -1,6 +1,13 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-/** clinics 테이블 한 행 (CLAUDE.md §3 스키마) */
+/**
+ * clinics 테이블 한 행 (CLAUDE.md §3 스키마 + cl_name 컬럼 추가).
+ *
+ * cl_name(종별코드명: 상급종합/종합병원/병원/의원)은 원래 스키마엔 없던 컬럼이다.
+ * lib/pediatricSpecialist.ts 에서 "진짜 전문의가 있는 병원인지" 추정할 때 필요해서
+ * 추가했다 — Supabase에 테이블을 만든다면 아래 컬럼도 같이 추가해야 한다:
+ *   alter table clinics add column cl_name text;
+ */
 export interface ClinicRow {
   id: string; // 심평원 ykiho
   name: string;
@@ -10,6 +17,7 @@ export interface ClinicRow {
   tel: string | null;
   lat: number;
   lng: number;
+  cl_name: string | null;
 }
 
 /** traffic_cache 테이블 한 행 */

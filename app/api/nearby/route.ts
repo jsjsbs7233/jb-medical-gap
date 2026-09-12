@@ -4,9 +4,11 @@ import { fetchAround } from '@/lib/hira';
 import { supabaseServer, type ClinicRow } from '@/lib/supabase';
 import { gridKey, haversineKm } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
+import { isPediatricSpecialistInstitution } from '@/lib/pediatricSpecialist';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 
-const CANDIDATES = 8; // Tmap을 부를 병원 수
+const CANDIDATES = 8; // 거리순으로 Tmap을 부를 병원 수
+const SPECIALIST_CANDIDATES = 3; // 거리순 8개 안에 전문의 병원이 없을 수 있어 추가로 확보
 const RADIUS_KM = 60; // 권역 경계를 넘기 위해 넉넉하게
 const CACHE_SEC = 180; // 교통 캐시 3분
 
@@ -19,7 +21,7 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
   if (supabase) {
     const { data, error } = await supabase
       .from('clinics')
-      .select('id, name, sido, sigungu, addr, tel, lat, lng');
+      .select('id, name, sido, sigungu, addr, tel, lat, lng, cl_name');
     if (!error && data && data.length > 0) return data as ClinicRow[];
   }
 
@@ -34,6 +36,7 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
     tel: h.tel,
     lat: h.lat,
     lng: h.lng,
+    cl_name: h.clName,
   }));
 }
 
@@ -83,9 +86,9 @@ async function writeCache(
  * GET /api/nearby?lat=&lng=
  *
  * ① 심평원 목록은 Supabase에서 읽는다 (없으면 직접 호출로 대체) — Tmap 호출 0회
- * ② 직선거리로 반경 60km 내 가까운 8개만 남긴다 — Tmap 호출 0회
+ * ② 직선거리로 반경 60km 내 가까운 8개 + 그 안에 없는 전문의 병원 최대 3개를 더한다 — Tmap 호출 0회
  * ③ 위치를 격자로 스냅해 3분 이내 캐시가 있으면 그대로 쓴다 — 캐시 히트 시 0회
- * ④ 남은 것만 Tmap 병렬 호출 — 최대 8회
+ * ④ 남은 것만 Tmap 병렬 호출
  *
  * 무슨 일이 있어도 500을 던지지 않는다 — 실패하면 200 + 빈 배열/추정치.
  */
@@ -108,11 +111,21 @@ export async function GET(req: NextRequest) {
   try {
     const base = await loadBaseClinics(lat, lng);
 
-    const withDistance = base
+    const scored = base
       .map((c) => ({ ...c, distanceKm: haversineKm({ lat, lng }, { lat: c.lat, lng: c.lng }) }))
       .filter((c) => c.distanceKm <= RADIUS_KM)
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .slice(0, CANDIDATES);
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    const nearestOverall = scored.slice(0, CANDIDATES);
+    // 거리순 후보 안에 전문의 병원이 없을 수 있어(일반의 GP 의원이 훨씬 많음),
+    // "가장 가까운 소아 전문진료"가 항상 실제 이동시간을 갖도록 별도로 확보한다.
+    const nearestSpecialists = scored
+      .filter((c) => isPediatricSpecialistInstitution(c.cl_name ?? '', c.name))
+      .slice(0, SPECIALIST_CANDIDATES);
+
+    const merged = new Map<string, (typeof scored)[number]>();
+    [...nearestOverall, ...nearestSpecialists].forEach((c) => merged.set(c.id, c));
+    const withDistance = Array.from(merged.values());
 
     if (withDistance.length === 0) {
       return NextResponse.json<NearbyResponse>({ items: [], gridKey: grid, cached: true });
@@ -173,6 +186,9 @@ export async function GET(req: NextRequest) {
       delay: r.estimated ? 1 : delayRatio(r.totalTime, r.totalDist),
       grade: grades[i],
       estimated: r.estimated,
+      // dgsbjtCd=11(소아청소년과)로 이미 걸러진 후보라 전부 소아 진료는 가능하다고 본다.
+      acceptsPediatricPatients: true,
+      hasPediatricSpecialist: isPediatricSpecialistInstitution(r.clinic.cl_name ?? '', r.clinic.name),
     }));
 
     items.sort((a, b) => a.minutes - b.minutes);

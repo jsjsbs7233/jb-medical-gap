@@ -37,14 +37,15 @@ interface Props {
   selectedId: string | null;
   recommendedGeneralId: string | null;
   recommendedSpecialistId: string | null;
-  routeTarget: HospitalCareInfo | null;
+  routePath: [number, number][] | null; // [lng, lat][] — /api/route의 실제 경로선
   onSelect: (id: string) => void;
 }
 
 /**
  * "가까운 소아 진료 / 가장 가까운 소아 전문진료" UI 전용 지도.
- * 기존 components/HospitalMap.tsx(실데이터·등급 기반)는 그대로 두고, 이 프로토타입은
- * 별도 컴포넌트로 분리했다 — 나중에 실제 데이터로 교체할 때 여기만 바꾸면 된다.
+ * 기존 components/HospitalMap.tsx(등급 기반 단일 리스트 UI, app/live)는 그대로 두고
+ * 이 화면은 별도 컴포넌트로 분리했다. hospitals는 실제 /api/nearby 데이터
+ * (app/page.tsx에서 HospitalCareInfo로 변환) 또는 실패 시 mock으로 채워진다.
  */
 export default function CareMap({
   userLocation,
@@ -52,7 +53,7 @@ export default function CareMap({
   selectedId,
   recommendedGeneralId,
   recommendedSpecialistId,
-  routeTarget,
+  routePath,
   onSelect,
 }: Props) {
   const mapDivRef = useRef<HTMLDivElement>(null);
@@ -140,12 +141,9 @@ export default function CareMap({
       polylineRef.current.setMap(null);
       polylineRef.current = null;
     }
-    if (!routeTarget) return;
+    if (!routePath || routePath.length === 0) return;
 
-    const path = [
-      new Tmapv2.LatLng(userLocation.lat, userLocation.lng),
-      new Tmapv2.LatLng(routeTarget.latitude, routeTarget.longitude),
-    ];
+    const path = routePath.map(([lng, latVal]) => new Tmapv2.LatLng(latVal, lng));
     polylineRef.current = new Tmapv2.Polyline({
       path,
       strokeColor: ROUTE_COLOR,
@@ -153,14 +151,7 @@ export default function CareMap({
       strokeOpacity: 0.9,
       map: mapRef.current,
     });
-
-    mapRef.current.setCenter(
-      new Tmapv2.LatLng(
-        (userLocation.lat + routeTarget.latitude) / 2,
-        (userLocation.lng + routeTarget.longitude) / 2
-      )
-    );
-  }, [routeTarget, userLocation, ready]);
+  }, [routePath, ready]);
 
   return (
     <div className="absolute inset-0 h-full w-full bg-neutral-100">
