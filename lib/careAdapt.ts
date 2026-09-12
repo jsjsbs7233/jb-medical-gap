@@ -20,6 +20,7 @@ export function clinicToCareInfo(c: Clinic): HospitalCareInfo {
     acceptsPediatricPatients: c.acceptsPediatricPatients ?? true,
     hasPediatricSpecialist: c.hasPediatricSpecialist ?? false,
     specialistDoctorCount: c.specialistDoctorCount,
+    pediatricSpecialistCount: c.pediatricSpecialistCount,
     isNightClinic: false,
     isHolidayClinic: false,
     recommendationReason: null,

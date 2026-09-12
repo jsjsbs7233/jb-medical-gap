@@ -28,6 +28,10 @@ export interface Clinic {
 
   // 병원 "전체"의 전문의 총원(과목 구분 없음, 심평원 mdeptSdrCnt). 선택 필드.
   specialistDoctorCount?: number;
+
+  // 이 병원의 "소아청소년과" 전문의 정확한 인원수(getDgsbjtInfo2.8로 확인된 실측치,
+  // 위의 추정 로직보다 우선한다). 조회 실패 시에만 undefined로 남는다.
+  pediatricSpecialistCount?: number;
 }
 
 export interface NearbyResponse {

@@ -1,13 +1,21 @@
 // 심평원 원시 데이터로 "진짜 소아청소년과 전문의가 있는 병원"인지 추정하는 규칙.
 //
+// ✅ 업데이트: lib/hiraDeptSpecialist.ts(getDgsbjtInfo2.8)로 병원별 소아청소년과
+//   전문의 "정확한 인원수"를 실제로 받아올 수 있게 됐다. 그래서 이 파일의 역할이
+//   바뀌었다 — 이제 여기 함수들은:
+//   1) isLikelyPediatricSpecialistCandidate(): /api/nearby가 "전문의 후보"를
+//      추릴 때 쓰는 느슨한 사전 필터 (실제 API 호출 대상을 좁히는 용도 — 최대한
+//      넓게 잡아야 진짜 전문의가 있는 병원을 후보에서 놓치지 않는다)
+//   2) isPediatricSpecialistInstitution(): getDgsbjtInfo2.8 호출이 실패했을 때만
+//      쓰는 최종 폴백 추정치 (예: DATA_GO_KR_DETAIL_KEY 미설정, API 일시 장애)
+//
 // 문제: dgsbjtCd=11(소아청소년과) 필터만으로는 두 경우를 구분할 수 없다.
 //   1) 진짜 소아청소년과 전문의가 있는 병원
 //   2) 전문의는 없지만, 소아청소년과로도 등록해서 아이를 봐주는 일반의
 //      (가정의학과·내과 등) — 의료 취약지에서 실제로 흔하다.
 //
-// 심평원의 상세 진료과목 API(getDgsbjtInfo, dgsbjtCdNm으로 확정 가능)는 이 계정에서
-// "NO_OPENAPI_SERVICE_ERROR"로 막혀 있어(활용신청 미승인 추정) 못 쓴다. 그래서 현실적인
-// 두 가지 신호로 추정한다 — 확정 데이터가 아니라 추정 규칙이라는 점을 유념할 것:
+// 폴백 추정치는 현실적인 두 가지 신호를 쓴다 — 확정 데이터가 아니라는 점을
+// 유념할 것 (실제 데이터를 못 가져왔을 때만 쓰인다):
 //
 //   ① 상급종합·종합병원 등급은 의료법상 소아청소년과가 필수 개설 과목이라
 //      전문의가 있다고 본다. ⚠ "병원"(종합병원 미만)은 여기 포함하지 않는다 —
@@ -63,4 +71,15 @@ export function isRelevantForPediatricCare(clName: string, name: string): boolea
   if (HOSPITAL_GRADE_NAMES.has(clName)) return true; // 병원급 이상은 소아청소년과가 실제로 있다고 봄
   if (PEDIATRIC_NAME_PATTERN.test(name)) return true; // 상호에 소아과 명시
   return !NON_PEDIATRIC_SPECIALTY_PATTERN.test(name);
+}
+
+/**
+ * "전문의 후보"를 추릴 때 쓰는 느슨한 사전 필터 — 병원급까지 전부 포함한다.
+ * 여기서 걸러진 후보들만 실제 getDgsbjtInfo2.8 API로 확인하므로, 최대한 넓게
+ * 잡아야 진안군의료원처럼 병원급인데 진짜 전문의가 있는 곳을 놓치지 않는다.
+ * (진짜 정답은 실제 API가 정하고, 이 함수는 "확인해볼 가치가 있는지"만 판단한다)
+ */
+export function isLikelyPediatricSpecialistCandidate(clName: string, name: string): boolean {
+  if (PEDIATRIC_NAME_PATTERN.test(name)) return true;
+  return HOSPITAL_GRADE_NAMES.has(clName);
 }

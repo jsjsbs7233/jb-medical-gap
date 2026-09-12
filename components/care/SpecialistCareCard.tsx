@@ -55,10 +55,16 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
             🕙 {hospital.closeTime} 진료 종료
           </span>
         )}
-        {!!hospital.specialistDoctorCount && (
-          <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
-            병원 전체 전문의 {hospital.specialistDoctorCount}명
+        {typeof hospital.pediatricSpecialistCount === 'number' ? (
+          <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
+            소아청소년과 전문의 {hospital.pediatricSpecialistCount}명
           </span>
+        ) : (
+          !!hospital.specialistDoctorCount && (
+            <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
+              병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
+            </span>
+          )
         )}
       </div>
 

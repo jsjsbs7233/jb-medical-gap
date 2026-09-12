@@ -44,10 +44,16 @@ export default function HospitalListItem({ hospital, isSelected, onDetail, onDir
         >
           {hospital.hasPediatricSpecialist ? '소아청소년과 전문의' : '소아 진료 가능(일반의)'}
         </span>
-        {!!hospital.specialistDoctorCount && (
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
-            병원 전체 전문의 {hospital.specialistDoctorCount}명
+        {typeof hospital.pediatricSpecialistCount === 'number' ? (
+          <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700">
+            소아청소년과 전문의 {hospital.pediatricSpecialistCount}명
           </span>
+        ) : (
+          !!hospital.specialistDoctorCount && (
+            <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
+              병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
+            </span>
+          )
         )}
         {hospital.hasEmergencyRoom && (
           <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
