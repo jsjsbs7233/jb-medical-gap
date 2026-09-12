@@ -1,3 +1,7 @@
+# JB Medical Gap
+
+전북 소아 야간·휴일 의료 정보 서비스
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
