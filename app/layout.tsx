@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,17 +32,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         {/*
-          Tmap JS SDK는 내부적으로 document.write를 사용해서, next/script 기본 전략
-          (비동기 주입)으로 불러오면 "It isn't possible to write into a document
-          from an asynchronously-loaded external script" 에러가 난다.
-          strategy="beforeInteractive"는 Next.js가 초기 HTML에 직접 심어서
-          브라우저가 페이지를 파싱하는 동안 동기적으로 실행되게 해준다 — 일반
-          <script> 태그와 동일한 실행 시점이면서 React 리렌더링 경고도 없다.
+          Tmap JS SDK는 내부적으로 document.write를 사용한다. next/script는 기본
+          전략은 물론 strategy="beforeInteractive"로도 브라우저 입장에서 "비동기
+          로드된 외부 스크립트"로 취급되어 "It isn't possible to write into a
+          document from an asynchronously-loaded external script" 에러가 난다
+          (직접 확인함 — beforeInteractive로 바꿨다가 재발해서 원복).
+          그래서 일반 <script> 태그로 둬서 브라우저가 HTML을 파싱하는 동안
+          진짜 동기적으로(막으면서) 실행되게 한다. React가 "리렌더링 시 스크립트가
+          실행 안 될 수 있다"는 콘솔 경고를 띄우지만, 이 레이아웃은 리렌더링되지
+          않고 최초 1회만 파싱되므로 실제로는 문제 없다 — 지도가 실제로 뜨는 게
+          이 경고를 없애는 것보다 훨씬 중요하다.
           지도 렌더링 전용 공개 키만 사용 (서버 전용 TMAP_APP_KEY와 다름).
         */}
-        <Script
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script
           src={`https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey=${process.env.NEXT_PUBLIC_TMAP_MAP_KEY ?? ""}`}
-          strategy="beforeInteractive"
         />
       </head>
       <body className="flex h-full flex-col">{children}</body>
