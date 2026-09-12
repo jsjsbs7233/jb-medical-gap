@@ -1,24 +1,64 @@
-// CLAUDE.md §3 — haversine, 격자 스냅.
+/**
+ * 거리 계산과 격자 스냅.
+ * "우리 서버 안의 판단"(C 담당) 중 후보 압축·캐시 키 생성에 쓰인다.
+ */
 
-const GRID = 0.01; // 약 1.1km
+// CLAUDE.md §3에 고정된 상수 — 임의로 바꾸지 않는다.
+export const CANDIDATES = 8;     // Tmap을 부를 병원 수
+export const RADIUS_KM = 60;     // 권역 경계를 넘기 위해 넉넉하게
+export const CACHE_SEC = 180;    // 교통 캐시 3분
+export const GRID = 0.01;        // 격자 크기 (약 1.1km)
 
-/** 위치를 격자로 스냅한 캐시 키. 35.8234,127.1456 -> "3582_12715" */
-export function gridKey(lat: number, lng: number): string {
-  const gLat = Math.round(lat / GRID);
-  const gLng = Math.round(lng / GRID);
-  return `${gLat}_${gLng}`;
-}
+const EARTH_RADIUS_KM = 6371;
 
+/** 두 좌표 사이의 직선거리(km). 후보 압축용 1차 필터에 쓴다. */
 export function haversineKm(
   a: { lat: number; lng: number },
-  b: { lat: number; lng: number }
+  b: { lat: number; lng: number },
 ): number {
-  const R = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
-  const la1 = toRad(a.lat);
-  const la2 = toRad(b.lat);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+
+  const h =
+    sinLat * sinLat +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+/**
+ * 위치를 1km 격자로 스냅해 캐시 키를 만든다.
+ * 35.8234, 127.1456 → "3582_12715"
+ * 같은 격자에서 요청하면 Tmap을 다시 부르지 않고 캐시를 그대로 쓴다.
+ */
+export function toGridKey(lat: number, lng: number): string {
+  const latGrid = Math.round(lat / GRID);
+  const lngGrid = Math.round(lng / GRID);
+  return `${latGrid}_${lngGrid}`;
+}
+
+/**
+ * 반경(km)을 감싸는 사각형 범위. DB 쿼리에서 1차로 걸러 haversine 계산량을
+ * 줄이는 용도 — clinics 테이블이 커질수록 매 요청 전체 스캔을 피해야 한다.
+ * 위도 1도 ≈ 111km, 경도는 위도에 따라 좁아지므로 cos(lat)로 보정한다.
+ */
+export function boundingBox(
+  center: { lat: number; lng: number },
+  radiusKm: number,
+): { minLat: number; maxLat: number; minLng: number; maxLng: number } {
+  const latDelta = radiusKm / 111;
+  const lngDelta = radiusKm / (111 * Math.cos(toRad(center.lat)) || 1);
+
+  return {
+    minLat: center.lat - latDelta,
+    maxLat: center.lat + latDelta,
+    minLng: center.lng - lngDelta,
+    maxLng: center.lng + lngDelta,
+  };
 }

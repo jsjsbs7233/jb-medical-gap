@@ -1,16 +1,25 @@
+/**
+ * 핵심 라우트. CLAUDE.md §3 "API 호출을 200회에서 8회로" 순서를 그대로 따르되,
+ * Supabase가 없어도(또는 아직 /api/sync를 안 돌렸어도) 심평원 직접 호출로
+ * 자동 대체하고, 소아 진료 가능/소아청소년과 전문의를 구분해서 내려준다.
+ *
+ * ① 심평원 목록은 Supabase에서 읽는다 (없으면 직접 호출로 대체) — Tmap 호출 0회
+ * ② bounding box + 직선거리로 반경 60km 내 가까운 8개 + 전문의 병원 최대 3개를 더한다
+ * ③ 위치를 격자로 스냅해 캐시가 있으면 그대로 쓴다(Supabase 있으면 DB, 없으면 서버 메모리)
+ * ④ 캐시에 없는 후보만 Tmap 병렬 호출
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoute } from '@/lib/tmap';
 import { fetchAround } from '@/lib/hira';
 import { supabaseServer, type ClinicRow } from '@/lib/supabase';
-import { gridKey, haversineKm } from '@/lib/geo';
+import { CANDIDATES, RADIUS_KM, CACHE_SEC, haversineKm, toGridKey, boundingBox } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
 import { isPediatricSpecialistInstitution, isRelevantForPediatricCare } from '@/lib/pediatricSpecialist';
 import type { Clinic, NearbyResponse } from '@/lib/types';
+import demoFixtures from '@/lib/demoFixtures.json';
 
-const CANDIDATES = 8; // 거리순으로 Tmap을 부를 병원 수
 const SPECIALIST_CANDIDATES = 3; // 거리순 8개 안에 전문의 병원이 없을 수 있어 추가로 확보
-const RADIUS_KM = 60; // 권역 경계를 넘기 위해 넉넉하게
-const CACHE_SEC = 180; // 교통 캐시 3분
+const FALLBACK_KMH = 45; // Tmap이 죽었을 때 직선거리를 시간으로 환산하는 가정 속도
 
 // Supabase가 아직 설정되지 않았을 때를 위한 인메모리 폴백 캐시 (같은 서버 인스턴스 안에서만 유효)
 const memCache = new Map<string, { totalTime: number; totalDist: number; ts: number }>();
@@ -19,9 +28,15 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
   const supabase = supabaseServer();
 
   if (supabase) {
+    // bounding box로 먼저 좁혀서 DB가 커져도 매 요청 전체 스캔을 피한다
+    const box = boundingBox({ lat, lng }, RADIUS_KM);
     const { data, error } = await supabase
       .from('clinics')
-      .select('id, name, sido, sigungu, addr, tel, lat, lng, cl_name, specialist_doctor_count');
+      .select('id, name, sido, sigungu, addr, tel, lat, lng, cl_name, specialist_doctor_count')
+      .gte('lat', box.minLat)
+      .lte('lat', box.maxLat)
+      .gte('lng', box.minLng)
+      .lte('lng', box.maxLng);
     if (!error && data && data.length > 0) return data as ClinicRow[];
   }
 
@@ -63,12 +78,7 @@ async function readCache(grid: string, clinicId: string) {
   return null;
 }
 
-async function writeCache(
-  grid: string,
-  clinicId: string,
-  totalTime: number,
-  totalDist: number
-) {
+async function writeCache(grid: string, clinicId: string, totalTime: number, totalDist: number) {
   const supabase = supabaseServer();
   if (supabase) {
     await supabase
@@ -86,28 +96,31 @@ async function writeCache(
  * 주변 소아과 목록.
  * GET /api/nearby?lat=&lng=
  *
- * ① 심평원 목록은 Supabase에서 읽는다 (없으면 직접 호출로 대체) — Tmap 호출 0회
- * ② 직선거리로 반경 60km 내 가까운 8개 + 그 안에 없는 전문의 병원 최대 3개를 더한다 — Tmap 호출 0회
- * ③ 위치를 격자로 스냅해 3분 이내 캐시가 있으면 그대로 쓴다 — 캐시 히트 시 0회
- * ④ 남은 것만 Tmap 병렬 호출
- *
  * 무슨 일이 있어도 500을 던지지 않는다 — 실패하면 200 + 빈 배열/추정치.
  */
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const lat = Number(searchParams.get('lat'));
-  const lng = Number(searchParams.get('lng'));
+  const latParam = req.nextUrl.searchParams.get('lat');
+  const lngParam = req.nextUrl.searchParams.get('lng');
 
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    return NextResponse.json<NearbyResponse>({
-      items: [],
-      gridKey: '',
-      cached: false,
-      error: 'lat, lng 파라미터가 필요합니다.',
-    });
+  // Number(null) === 0 이라 누락된 것과 진짜 0,0을 구분하려면 null 체크를 먼저 해야 한다
+  if (latParam === null || lngParam === null) {
+    return empty('lat, lng 파라미터가 필요합니다.');
   }
 
-  const grid = gridKey(lat, lng);
+  const lat = Number(latParam);
+  const lng = Number(lngParam);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return empty('lat, lng 값이 올바르지 않습니다.');
+  }
+
+  const grid = toGridKey(lat, lng);
+
+  // 최후의 보험(CLAUDE.md §7) — DB/Tmap을 아예 건드리지 않고 미리 검증해둔 고정 응답을 낸다.
+  if (process.env.DEMO_MODE === '1') {
+    const fixture = (demoFixtures as Record<string, NearbyResponse>)[grid];
+    if (fixture) return NextResponse.json<NearbyResponse>(fixture);
+  }
 
   try {
     const base = await loadBaseClinics(lat, lng);
@@ -134,7 +147,12 @@ export async function GET(req: NextRequest) {
     const withDistance = Array.from(merged.values());
 
     if (withDistance.length === 0) {
-      return NextResponse.json<NearbyResponse>({ items: [], gridKey: grid, cached: true });
+      return NextResponse.json<NearbyResponse>({
+        items: [],
+        gridKey: grid,
+        cached: true,
+        error: `반경 ${RADIUS_KM}km 내 소아과가 없습니다`,
+      });
     }
 
     let allFromCache = true;
@@ -143,12 +161,7 @@ export async function GET(req: NextRequest) {
       withDistance.map(async (c) => {
         const hit = await readCache(grid, c.id);
         if (hit) {
-          return {
-            clinic: c,
-            totalTime: hit.totalTime,
-            totalDist: hit.totalDist,
-            estimated: false,
-          };
+          return { clinic: c, totalTime: hit.totalTime, totalDist: hit.totalDist, estimated: false };
         }
 
         allFromCache = false;
@@ -165,11 +178,10 @@ export async function GET(req: NextRequest) {
         }
 
         // Tmap 실패 — 직선거리 ÷ 45km/h 로 추정
-        const distM = c.distanceKm * 1000;
         return {
           clinic: c,
-          totalTime: (c.distanceKm / 45) * 3600,
-          totalDist: distM,
+          totalTime: (c.distanceKm / FALLBACK_KMH) * 3600,
+          totalDist: c.distanceKm * 1000,
           estimated: true,
         };
       })
@@ -189,7 +201,7 @@ export async function GET(req: NextRequest) {
       lng: r.clinic.lng,
       minutes: minutesList[i],
       distanceKm: Math.round((r.totalDist / 1000) * 10) / 10,
-      delay: r.estimated ? 1 : delayRatio(r.totalTime, r.totalDist),
+      delay: r.estimated ? 1 : Math.round(delayRatio(r.totalTime, r.totalDist) * 100) / 100,
       grade: grades[i],
       estimated: r.estimated,
       // dgsbjtCd=11(소아청소년과)로 이미 걸러진 후보라 전부 소아 진료는 가능하다고 본다.
@@ -206,11 +218,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json<NearbyResponse>({ items, gridKey: grid, cached: allFromCache });
   } catch {
-    return NextResponse.json<NearbyResponse>({
-      items: [],
-      gridKey: grid,
-      cached: false,
-      error: '일시적으로 정보를 불러오지 못했습니다',
-    });
+    return empty('일시적으로 정보를 불러오지 못했습니다');
   }
+}
+
+function empty(error: string) {
+  return NextResponse.json<NearbyResponse>({ items: [], gridKey: '', cached: false, error });
 }

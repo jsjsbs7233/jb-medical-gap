@@ -42,3 +42,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 ## 프로젝트 소개
 
 전북 권역 소아과 도착시간 지도 — 행정구역이 아니라 실시간 교통 기준 도착 시간으로 의료권을 다시 그리는 서비스입니다.
+
+핵심 API: `/api/nearby`(주변 소아과 도착시간 조회), `/api/sync`(심평원 데이터 Supabase 적재).

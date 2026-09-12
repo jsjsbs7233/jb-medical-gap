@@ -4,6 +4,8 @@ import { supabaseServer } from '@/lib/supabase';
 
 export const maxDuration = 60; // 시간이 걸리는 작업이라 늘려둔다
 
+const CHUNK_SIZE = 500; // 한 번에 다 넣지 않고 잘라서 upsert (C님 개선점)
+
 /** 전북 + 인접 권역을 덮는 중심점들. 경계를 넘는 게 이 프로젝트의 핵심이다 */
 const CENTERS = [
   { name: '전주', lat: 35.8242, lng: 127.148 },
@@ -20,6 +22,23 @@ const CENTERS = [
   { name: '광주', lat: 35.1595, lng: 126.8526 },
   { name: '순천', lat: 34.9506, lng: 127.4872 },
 ];
+
+function toRow(c: RawClinic) {
+  return {
+    id: c.id,
+    name: c.name,
+    cl_name: c.clName || null, // "진짜 소아청소년과 전문의" 추정(lib/pediatricSpecialist.ts)에 필요
+    sido: c.sido || null,
+    sido_raw: c.sidoRaw || null,
+    sigungu: c.sigungu || null,
+    is_jeonbuk: c.isJeonbuk,
+    addr: c.addr,
+    tel: c.tel,
+    lat: c.lat,
+    lng: c.lng,
+    specialist_doctor_count: c.specialistDoctorCount,
+  };
+}
 
 /**
  * 심평원 → Supabase 적재. 개발 중 수동 호출용 (하루 1회).
@@ -61,23 +80,20 @@ export async function POST() {
     });
   }
 
-  const rows = items.map((c) => ({
-    id: c.id,
-    name: c.name,
-    sido: c.sido || null,
-    sigungu: c.sigungu || null,
-    addr: c.addr,
-    tel: c.tel,
-    lat: c.lat,
-    lng: c.lng,
-    cl_name: c.clName || null, // "진짜 소아청소년과 전문의" 추정(lib/pediatricSpecialist.ts)에 필요
-    specialist_doctor_count: c.specialistDoctorCount,
-  }));
+  // 500건씩 잘라서 upsert. 한 청크가 실패해도 나머지는 계속 넣고, 실패 원인은 남긴다.
+  let inserted = 0;
+  const errors: string[] = [];
+  for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+    const chunk = items.slice(i, i + CHUNK_SIZE).map(toRow);
+    const { error } = await supabase.from('clinics').upsert(chunk, { onConflict: 'id' });
 
-  const { error } = await supabase.from('clinics').upsert(rows, { onConflict: 'id' });
-  if (error) {
-    return NextResponse.json({ inserted: 0, bySido, report, error: error.message });
+    if (error) {
+      console.error(`[/api/sync] upsert 실패 (${i}~${i + chunk.length}):`, error.message);
+      errors.push(error.message);
+    } else {
+      inserted += chunk.length;
+    }
   }
 
-  return NextResponse.json({ inserted: rows.length, bySido, report });
+  return NextResponse.json({ inserted, total: items.length, bySido, report, errors });
 }
