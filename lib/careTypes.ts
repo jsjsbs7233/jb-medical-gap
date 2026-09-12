@@ -10,6 +10,8 @@
 // (소아청소년과 전문의 보유)는 절대 같은 의미가 아니다 — 이 프로젝트가 원래
 // 짚으려던 문제(전문의 없는 지역은 일반의가 소아 진료를 대신한다)가 바로 이 둘의
 // 차이에서 나온다.
+import type { Grade } from './types';
+
 export interface HospitalCareInfo {
   id: string;
   name: string;
@@ -20,6 +22,11 @@ export interface HospitalCareInfo {
 
   travelTime: number; // 분
   distance: number; // km
+
+  // 실시간 교통 기반 등급 — lib/types.ts의 Clinic.grade/delay와 같은 값(Tmap
+  // trafficInfo:'Y'로 계산). 지도 마커 색이 이 값을 따른다(빠름=초록/보통=주황/느림=빨강).
+  grade: Grade;
+  delay: number; // 지연율. 1.0=원활, 1.5=평소의 1.5배
 
   // 실제 심평원 데이터로는 진료시간을 알 수 없다(상세 API 미승인 + CLAUDE.md도
   // "진료시간 필터"는 범위에서 제외). 그래서 선택 필드로 두고, 값이 있을 때만

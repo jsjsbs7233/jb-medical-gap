@@ -33,15 +33,23 @@ export function clinicMarkerIcon(grade: Grade, minutes: number, selected: boolea
 }
 
 // "가까운 소아 진료 / 가장 가까운 소아 전문진료" 두 트랙 UI용 마커.
-// general(일반 소아 진료 가능)과 specialist(소아청소년과 전문의)를 색으로 구분하고,
-// 그 중 추천된 1곳(recommended)은 별 아이콘 + 조금 더 크게 그린다.
+//
+// 리스트 카드(HospitalListItem)의 작은 점은 여전히 일반/전문의 구분에 이 색을 쓴다.
 export const CARE_MARKER_COLOR = {
   general: '#64748B', // slate-500 — 소아 진료 가능(전문의 여부 무관)
   specialist: '#0E7C86', // 메인 컬러(경로선과 동일) — 소아청소년과 전문의
 };
 
+// 지도 마커 원 색깔은 실시간 교통(이동시간 등급)을 나타낸다.
+// 빠름(원활)=초록 / 보통=주황 / 느림(혼잡)=빨강. ("혼잡"이라는 단어는 화면 텍스트엔 안 씀)
+export const TRAFFIC_MARKER_COLOR: Record<Grade, string> = {
+  FAST: '#16A34A',
+  NORMAL: '#F59E0B',
+  SLOW: '#DC2626',
+};
+
 export function careMarkerIcon(
-  kind: 'general' | 'specialist',
+  grade: Grade,
   minutes: number,
   opts: { selected?: boolean; recommended?: boolean } = {}
 ) {
@@ -50,7 +58,7 @@ export function careMarkerIcon(
   const r = size / 2 - 3;
   const cx = size / 2;
   const cy = size / 2;
-  const color = CARE_MARKER_COLOR[kind];
+  const color = TRAFFIC_MARKER_COLOR[grade];
 
   const badge = recommended
     ? `<circle cx="${size - 8}" cy="8" r="8" fill="#F5B300" stroke="#ffffff" stroke-width="2" />

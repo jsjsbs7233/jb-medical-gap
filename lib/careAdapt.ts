@@ -14,6 +14,8 @@ export function clinicToCareInfo(c: Clinic): HospitalCareInfo {
     address: c.addr ?? '',
     travelTime: c.minutes,
     distance: c.distanceKm,
+    grade: c.grade,
+    delay: c.delay,
     acceptsPediatricPatients: c.acceptsPediatricPatients ?? true,
     hasPediatricSpecialist: c.hasPediatricSpecialist ?? false,
     isNightClinic: false,
