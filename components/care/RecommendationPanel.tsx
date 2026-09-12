@@ -2,6 +2,7 @@ import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import HospitalFilter from './HospitalFilter';
 import PediatricCareCard from './PediatricCareCard';
 import SpecialistCareCard from './SpecialistCareCard';
+import HospitalListItem from './HospitalListItem';
 
 interface Props {
   locationLabel: string;
@@ -9,6 +10,8 @@ interface Props {
   onFilterChange: (v: CareFilter) => void;
   nearestGeneral: HospitalCareInfo | null;
   nearestSpecialist: HospitalCareInfo | null;
+  hospitals: HospitalCareInfo[]; // 주변 병원 전체 목록(필터 적용됨, 이동시간 오름차순)
+  selectedId: string | null;
   onDetail: (id: string) => void;
   onDirections: (id: string) => void;
   mobileExpanded: boolean;
@@ -25,6 +28,8 @@ export default function RecommendationPanel({
   onFilterChange,
   nearestGeneral,
   nearestSpecialist,
+  hospitals,
+  selectedId,
   onDetail,
   onDirections,
   mobileExpanded,
@@ -53,6 +58,27 @@ export default function RecommendationPanel({
         ) : (
           <EmptyNotice text="반경 내 소아청소년과 전문의 의료기관이 없습니다." />
         )}
+      </div>
+
+      <div className="mt-5">
+        <p className="mb-2 text-xs font-semibold text-neutral-500">
+          주변 병원 목록 ({hospitals.length}곳)
+        </p>
+        <div className="flex flex-col gap-2">
+          {hospitals.length === 0 ? (
+            <EmptyNotice text="조건에 맞는 병원이 없습니다." />
+          ) : (
+            hospitals.map((h) => (
+              <HospitalListItem
+                key={h.id}
+                hospital={h}
+                isSelected={h.id === selectedId}
+                onDetail={onDetail}
+                onDirections={onDirections}
+              />
+            ))
+          )}
+        </div>
       </div>
     </>
   );

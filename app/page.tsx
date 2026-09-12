@@ -139,6 +139,8 @@ export default function Home() {
         onFilterChange={setFilter}
         nearestGeneral={nearestGeneral}
         nearestSpecialist={nearestSpecialist}
+        hospitals={mapHospitals}
+        selectedId={selectedId}
         onDetail={handleDetail}
         onDirections={handleDirections}
         mobileExpanded={mobileExpanded}
