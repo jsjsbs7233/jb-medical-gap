@@ -66,6 +66,11 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
             </span>
           )
         )}
+        {hospital.hasEmergencyRoom && (
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+            🚑 응급실 가용병상 {hospital.erAvailableBeds}
+          </span>
+        )}
       </div>
 
       {hospital.recommendationReason && (
