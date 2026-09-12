@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoute } from '@/lib/tmap';
-import { fetchPediatricClinicsNearby } from '@/lib/hira';
+import { fetchAround } from '@/lib/hira';
 import { supabaseServer, type ClinicRow } from '@/lib/supabase';
 import { gridKey, haversineKm } from '@/lib/geo';
 import { gradeByRank, delayRatio } from '@/lib/grade';
@@ -24,9 +24,9 @@ async function loadBaseClinics(lat: number, lng: number): Promise<ClinicRow[]> {
   }
 
   // Supabase 미설정이거나 아직 /api/sync를 안 돌렸을 때 — 심평원 직접 호출로 대체
-  const hira = await fetchPediatricClinicsNearby(lat, lng, RADIUS_KM * 1000);
+  const hira = await fetchAround({ lat, lng }, RADIUS_KM * 1000);
   return hira.map((h) => ({
-    id: h.ykiho,
+    id: h.id,
     name: h.name,
     sido: h.sido,
     sigungu: h.sigungu,
