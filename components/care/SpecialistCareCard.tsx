@@ -65,7 +65,7 @@ export default function SpecialistCareCard({
             🕙 {hospital.closeTime} 진료 종료
           </span>
         )}
-        {typeof hospital.pediatricSpecialistCount === 'number' ? (
+        {typeof hospital.pediatricSpecialistCount === 'number' && hospital.pediatricSpecialistCount > 0 ? (
           <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
             소아청소년과 전문의 {hospital.pediatricSpecialistCount}명
           </span>
