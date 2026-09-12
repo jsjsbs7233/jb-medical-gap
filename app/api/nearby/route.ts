@@ -24,6 +24,7 @@ import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
 const SPECIALIST_CANDIDATES = 3; // 거리순 8개 안에 전문의 병원이 없을 수 있어 추가로 확보
+const GENERAL_CANDIDATES = 10; // "소아 진료 가능" 필터 목록이 최소 이 수만큼은 나오도록 확보
 const FALLBACK_KMH = 45; // Tmap이 죽었을 때 직선거리를 시간으로 환산하는 가정 속도
 
 // Supabase가 아직 설정되지 않았을 때를 위한 인메모리 폴백 캐시 (같은 서버 인스턴스 안에서만 유효)
@@ -150,9 +151,15 @@ export async function GET(req: NextRequest) {
     const nearestSpecialists = scored
       .filter((c) => isLikelyPediatricSpecialistCandidate(c.cl_name ?? '', c.name))
       .slice(0, SPECIALIST_CANDIDATES);
+    // 거리순 8개 중 정형외과·이비인후과 등 소아과와 무관한 곳이 섞여 있으면
+    // "소아 진료 가능" 목록이 8개보다 훨씬 적게 남을 수 있어, 실제로 소아 진료가
+    // 관련 있는 곳만 따로 더 넉넉히 확보한다.
+    const nearestRelevant = scored
+      .filter((c) => isRelevantForPediatricCare(c.cl_name ?? '', c.name))
+      .slice(0, GENERAL_CANDIDATES);
 
     const merged = new Map<string, (typeof scored)[number]>();
-    [...nearestOverall, ...nearestSpecialists].forEach((c) => merged.set(c.id, c));
+    [...nearestOverall, ...nearestSpecialists, ...nearestRelevant].forEach((c) => merged.set(c.id, c));
     const withDistance = Array.from(merged.values());
 
     if (withDistance.length === 0) {
