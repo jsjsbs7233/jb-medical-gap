@@ -20,6 +20,17 @@
 
 const BASE = 'https://apis.data.go.kr/B552657/ErmctInfoInqireService/getSrsillDissAceptncPosblInfoInqire';
 const BEDS_BASE = 'https://apis.data.go.kr/B552657/ErmctInfoInqireService/getEmrrmRltmUsefulSckbdInfoInqire';
+const LIST_BASE = 'https://apis.data.go.kr/B552657/ErmctInfoInqireService/getEgytListInfoInqire';
+
+export interface ErHospital {
+  hpid: string;
+  name: string; // dutyName
+  addr: string | null; // dutyAddr
+  sido: string; // addr 첫 토큰
+  tel: string | null; // dutyTel1
+  lat: number;
+  lng: number;
+}
 
 export interface SevereIllnessAcceptance {
   name: string; // dutyName
@@ -33,6 +44,23 @@ export interface ErBedStatus {
   hpid: string;
   availableBeds: number; // hvec — 응급실 가용 병상수. 음수면 정원 초과(대기)로 해석됨
   updatedAt: string | null; // hvidate(YYYYMMDDHHMMSS)를 ISO 비슷한 문자열로 변환
+}
+
+// "응급실" 필터에서 반경 내 모든 응급실을 보여줄 때 쓰는 응답 항목 —
+// 소아과 후보 목록(Clinic)과는 별개로, ErHospital + ErBedStatus를 합친 모양이다.
+export interface NearbyErHospital {
+  id: string; // hpid
+  name: string;
+  addr: string | null;
+  sido: string;
+  tel: string | null;
+  lat: number;
+  lng: number;
+  distanceKm: number;
+  minutes: number; // 추정치(직선거리 ÷ 45km/h) — 실시간 교통 아님
+  hasEmergencyRoom: true;
+  erAvailableBeds?: number;
+  erUpdatedAt?: string | null;
 }
 
 function parseHvidate(raw: unknown): string | null {
@@ -91,6 +119,50 @@ export async function fetchSevereIllnessAcceptance(sido: string): Promise<Severe
         capabilities,
       };
     });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 전국 응급실 운영 기관 목록(좌표 포함)을 한 번에 가져온다. STAGE1(시도) 파라미터를
+ * 이 오퍼레이션은 무시하고 항상 전국 목록(총 500여 곳)을 주기 때문에, 지역은 우리가
+ * 좌표로 직접 걸러야 한다 — "응급실" 필터에서 "반경 Nkm 내 모든 응급실"을 보여줄 때 쓴다.
+ * 실패해도 절대 throw하지 않는다 — 빈 배열을 반환한다.
+ */
+export async function fetchAllErHospitals(): Promise<ErHospital[]> {
+  const key = process.env.DATA_GO_KR_ERMCT_KEY;
+  if (!key) return [];
+
+  try {
+    const qs = new URLSearchParams({
+      serviceKey: key,
+      pageNo: '1',
+      numOfRows: '1000',
+      _type: 'json',
+    });
+
+    const res = await fetch(`${LIST_BASE}?${qs.toString()}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return [];
+
+    const json = await res.json();
+    const header = (json as { response?: { header?: { resultCode?: string } } })?.response?.header;
+    if (header?.resultCode !== '00') return [];
+
+    return normalizeItems(json)
+      .filter((it) => it.wgs84Lat !== undefined && it.wgs84Lon !== undefined)
+      .map((it) => {
+        const addr = it.dutyAddr ? String(it.dutyAddr) : null;
+        return {
+          hpid: String(it.hpid ?? ''),
+          name: String(it.dutyName ?? ''),
+          addr,
+          sido: addr?.trim().split(/\s+/)[0] ?? '',
+          tel: it.dutyTel1 ? String(it.dutyTel1) : null,
+          lat: Number(it.wgs84Lat),
+          lng: Number(it.wgs84Lon),
+        };
+      });
   } catch {
     return [];
   }

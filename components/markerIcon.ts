@@ -40,12 +40,12 @@ export const CARE_MARKER_COLOR = {
   specialist: '#0E7C86', // 메인 컬러(경로선과 동일) — 소아청소년과 전문의
 };
 
-// 지도 마커 원 색깔은 실시간 교통(이동시간 등급)을 나타낸다.
-// 빠름(원활)=초록 / 보통=주황 / 느림(혼잡)=빨강. ("혼잡"이라는 단어는 화면 텍스트엔 안 씀)
+// 팀 합의로 이동시간 등급별 색 구분(초록/주황/빨강)을 없애고 단일 색으로 통일했다.
+// Grade 값 자체(FAST/NORMAL/SLOW)는 목록 정렬 등 다른 곳에서 계속 쓰이므로 남겨둔다.
 export const TRAFFIC_MARKER_COLOR: Record<Grade, string> = {
   FAST: '#16A34A',
-  NORMAL: '#F59E0B',
-  SLOW: '#DC2626',
+  NORMAL: '#16A34A',
+  SLOW: '#16A34A',
 };
 
 // 아기 얼굴(소아청소년과 전문의) / 병원 건물(일반 소아 진료) 아이콘.
