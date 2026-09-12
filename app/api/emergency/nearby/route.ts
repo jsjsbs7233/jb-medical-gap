@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchAllErHospitals, fetchErRealtimeBeds, type NearbyErHospital } from '@/lib/hiraEmergency';
 import { haversineKm } from '@/lib/geo';
 
-const DEFAULT_RADIUS_KM = 100;
+const DEFAULT_RADIUS_KM = 30;
 const FALLBACK_KMH = 45; // 실시간 경로 없이 직선거리로만 추정(Tmap 호출 안 함 — 최대 500여 곳이라 호출량이 너무 커짐)
 
 /**
