@@ -79,7 +79,7 @@ export default function SpecialistCareCard({
         ) : (
           !!hospital.specialistDoctorCount && (
             <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
-              병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
+              병원 전체 전문의 {hospital.specialistDoctorCount}명
             </span>
           )
         )}
