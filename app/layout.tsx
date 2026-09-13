@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "소아과 도착시간 지도",
+  title: "골든타임",
   description: "행정구역이 아니라 도착 시간으로 의료권을 다시 그립니다.",
 };
 
