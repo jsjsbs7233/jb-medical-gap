@@ -51,7 +51,14 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs text-neutral-400">{hospital.region}</p>
-          <p className="text-[15px] font-semibold text-neutral-900">{hospital.name}</p>
+          <div className="flex items-baseline gap-1.5">
+            <p className="text-[15px] font-semibold text-neutral-900">{hospital.name}</p>
+            {hospital.tel && (
+              <a href={`tel:${hospital.tel}`} className="text-xs text-neutral-400">
+                {hospital.tel}
+              </a>
+            )}
+          </div>
         </div>
         <button onClick={onClose} className="rounded-full p-1 text-neutral-400 hover:bg-neutral-100">
           ✕

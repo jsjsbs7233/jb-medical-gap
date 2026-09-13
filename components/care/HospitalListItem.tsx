@@ -26,6 +26,20 @@ export default function HospitalListItem({ hospital, isSelected, onDetail, onDir
             style={{ backgroundColor: CARE_MARKER_COLOR[kind] }}
           />
           <p className="text-sm font-semibold text-neutral-900">{hospital.name}</p>
+          {hospital.tel && (
+            // 카드 전체가 <button>이라 <a>를 못 넣는다(버튼 안에 링크 중첩 금지) —
+            // 기존 "상세보기"/"길찾기"처럼 role="button" span으로 tel: 이동을 흉내낸다.
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                window.location.href = `tel:${hospital.tel}`;
+              }}
+              role="button"
+              className="text-xs text-neutral-400"
+            >
+              {hospital.tel}
+            </span>
+          )}
         </div>
         <div className="flex items-baseline gap-1 whitespace-nowrap text-sm font-bold tabular-nums text-neutral-800">
           {hospital.travelTime}

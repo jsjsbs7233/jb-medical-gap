@@ -17,6 +17,7 @@ export interface HospitalCareInfo {
   longitude: number;
   region: string;
   address: string;
+  tel?: string | null;
 
   travelTime: number; // 분
   distance: number; // km
