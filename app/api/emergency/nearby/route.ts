@@ -78,7 +78,10 @@ export async function GET(req: NextRequest) {
     items.sort((a, b) => {
       const tierDiff = bedTier(a.erAvailableBeds) - bedTier(b.erAvailableBeds);
       if (tierDiff !== 0) return tierDiff;
-      return a.distanceKm - b.distanceKm;
+      // 거리(km)가 아니라 실제 이동시간(분)으로 비교한다 — "혼잡도가 아니라
+      // 도착 시간"이 이 프로젝트의 핵심 원칙이라, 거리가 가까워도 시간이 더
+      // 걸리는 곳을 위에 두면 안 된다. 분이 같으면 거리를 2차 기준으로 쓴다.
+      return a.minutes - b.minutes || a.distanceKm - b.distanceKm;
     });
 
     return NextResponse.json({ items });
