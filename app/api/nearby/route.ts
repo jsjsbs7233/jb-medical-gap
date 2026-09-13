@@ -20,6 +20,7 @@ import {
   isRelevantForPediatricCare,
 } from '@/lib/pediatricSpecialist';
 import { fetchPediatricSpecialistCount } from '@/lib/hiraDeptSpecialist';
+import { fetchOperatingHours, getOpenStatus } from '@/lib/hiraOperatingHours';
 import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
@@ -175,12 +176,16 @@ export async function GET(req: NextRequest) {
 
     const results = await Promise.all(
       withDistance.map(async (c) => {
-        // 소아청소년과 전문의 정확한 인원수 — 이동시간 계산과 동시에 병렬로 조회한다.
-        // 실패(null)하면 아래에서 기존 추정 로직으로 대체한다.
-        const [hit, pediatricSpecialistCount] = await Promise.all([
+        // 소아청소년과 전문의 정확한 인원수 + 요일별 진료시간 — 이동시간 계산과
+        // 동시에 병렬로 조회한다. 진료시간 정보가 없는 병원은 openStatus가
+        // 'unknown'으로 남는다("휴진"이 아니라 "확인 안 됨" — 프론트가 그 상태로
+        // "지금 진료중만" 토글과 "전화로 문의해주세요" 안내에 쓴다).
+        const [hit, pediatricSpecialistCount, hours] = await Promise.all([
           readCache(grid, c.id),
           fetchPediatricSpecialistCount(c.id),
+          fetchOperatingHours(c.id),
         ]);
+        const openStatus = getOpenStatus(hours);
 
         if (hit) {
           return {
@@ -189,6 +194,7 @@ export async function GET(req: NextRequest) {
             totalDist: hit.totalDist,
             estimated: false,
             pediatricSpecialistCount,
+            openStatus,
           };
         }
 
@@ -203,6 +209,7 @@ export async function GET(req: NextRequest) {
             totalDist: route.totalDistance,
             estimated: false,
             pediatricSpecialistCount,
+            openStatus,
           };
         }
 
@@ -213,6 +220,7 @@ export async function GET(req: NextRequest) {
           totalDist: c.distanceKm * 1000,
           estimated: true,
           pediatricSpecialistCount,
+          openStatus,
         };
       })
     );
@@ -256,6 +264,7 @@ export async function GET(req: NextRequest) {
       hasPediatricSpecialist,
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
       pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
+      openStatus: r.openStatus,
       };
     });
 

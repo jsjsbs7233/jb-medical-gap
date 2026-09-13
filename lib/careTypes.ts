@@ -27,11 +27,14 @@ export interface HospitalCareInfo {
   grade: Grade;
   delay: number; // 지연율. 1.0=원활, 1.5=평소의 1.5배
 
-  // 실제 심평원 데이터로는 진료시간을 알 수 없다(상세 API 미승인 + CLAUDE.md도
-  // "진료시간 필터"는 범위에서 제외). 그래서 선택 필드로 두고, 값이 있을 때만
-  // (주로 mock 데이터) 카드에 뱃지를 그린다.
+  // mock 데이터 전용(선택 필드) — 값이 있을 때만 카드에 뱃지를 그린다.
   isOpen?: boolean;
   closeTime?: string | null;
+
+  // "지금 진료중만" 토글용 실측치(getDtlInfo2.8, §1 예외로 팀 합의). 'unknown'은
+  // 이 병원의 진료시간 정보 자체가 없다는 뜻 — 휴진이 아니라 확인 불가라서, 토글을
+  // 켜도 목록에서 빼지 않고 "전화로 문의해주세요" 안내로 대체한다.
+  openStatus?: 'open' | 'closed' | 'unknown';
 
   acceptsPediatricPatients: boolean; // 소아 환자 진료 가능
   hasPediatricSpecialist: boolean; // 소아청소년과 전문의 보유

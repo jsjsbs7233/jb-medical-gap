@@ -32,6 +32,11 @@ export interface Clinic {
   // 이 병원의 "소아청소년과" 전문의 정확한 인원수(getDgsbjtInfo2.8로 확인된 실측치,
   // 위의 추정 로직보다 우선한다). 조회 실패 시에만 undefined로 남는다.
   pediatricSpecialistCount?: number;
+
+  // 지금(KST) 진료 중인지(getDtlInfo2.8 요일별 진료시간 기준) — "지금 진료중만"
+  // 토글용. 'unknown'은 이 병원의 진료시간 상세정보 자체가 없다는 뜻으로,
+  // 휴진이 아니라 "확인 안 됨"이다(전화 문의 안내 문구로 이어짐).
+  openStatus?: 'open' | 'closed' | 'unknown';
 }
 
 export interface NearbyResponse {

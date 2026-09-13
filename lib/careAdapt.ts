@@ -22,6 +22,7 @@ export function clinicToCareInfo(c: Clinic): HospitalCareInfo {
     hasPediatricSpecialist: c.hasPediatricSpecialist ?? false,
     specialistDoctorCount: c.specialistDoctorCount,
     pediatricSpecialistCount: c.pediatricSpecialistCount,
+    openStatus: c.openStatus,
     isNightClinic: false,
     isHolidayClinic: false,
     recommendationReason: null,
@@ -53,6 +54,9 @@ export function erHospitalToCareInfo(h: NearbyErHospital): HospitalCareInfo {
     hasEmergencyRoom: true,
     erAvailableBeds: h.erAvailableBeds,
     erUpdatedAt: h.erUpdatedAt,
+    // 응급실 운영시간(진료시간과 별개)은 이 데이터셋엔 없다 — "모름"으로 둬서
+    // "지금 진료중만" 토글을 켜도 숨기지 않고 전화 문의 안내로 대체되게 한다.
+    openStatus: 'unknown',
     isNightClinic: false,
     isHolidayClinic: false,
     recommendationReason: null,
@@ -115,6 +119,7 @@ export function enrichErWithPediatricInfo(
       hasPediatricSpecialist: match.hasPediatricSpecialist,
       specialistDoctorCount: match.specialistDoctorCount,
       pediatricSpecialistCount: match.pediatricSpecialistCount,
+      openStatus: match.openStatus,
     };
   });
 }

@@ -6,10 +6,11 @@ interface Props {
   isSelected: boolean;
   onDetail: (id: string) => void;
   onDirections: (id: string) => void;
+  openOnly?: boolean; // "지금 진료중만" 토글이 켜져 있을 때만 진료시간 관련 안내를 보여준다
 }
 
 /** 주변 병원 목록의 카드 한 줄 — 위 두 추천 카드와 같은 방식(정보/버튼 구성)을 따르되 더 간결하게. */
-export default function HospitalListItem({ hospital, isSelected, onDetail, onDirections }: Props) {
+export default function HospitalListItem({ hospital, isSelected, onDetail, onDirections, openOnly }: Props) {
   const kind = hospital.hasPediatricSpecialist ? 'specialist' : 'general';
 
   return (
@@ -72,6 +73,11 @@ export default function HospitalListItem({ hospital, isSelected, onDetail, onDir
         {hospital.hasEmergencyRoom && (
           <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-700">
             🚑 응급실 가용병상 {hospital.erAvailableBeds}
+          </span>
+        )}
+        {openOnly && hospital.openStatus === 'unknown' && (
+          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+            📞 전화로 문의해주세요
           </span>
         )}
       </div>
