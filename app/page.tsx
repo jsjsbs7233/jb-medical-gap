@@ -8,12 +8,18 @@ import type { NearbyResponse, RouteResponse } from '@/lib/types';
 import { FALLBACK_LOCATION } from '@/lib/mock';
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { MOCK_CARE_HOSPITALS } from '@/lib/careMock';
-import { clinicToCareInfo, applyEmergencyInfo } from '@/lib/careAdapt';
+import {
+  clinicToCareInfo,
+  applyEmergencyInfo,
+  erHospitalToCareInfo,
+  enrichErWithPediatricInfo,
+} from '@/lib/careAdapt';
 import {
   filterByCareType,
   pickNearestAccepting,
   pickNearestSpecialist,
   sortForList,
+  sortByTravelTime,
 } from '@/lib/careRecommend';
 import CareMap from '@/components/care/CareMap';
 import CareLegend from '@/components/care/CareLegend';
@@ -26,10 +32,13 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [filter, setFilter] = useState<CareFilter>('all');
+  const [filter, setFilter] = useState<CareFilter>('general');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][] | null>(null);
   const [mobileExpanded, setMobileExpanded] = useState(true);
+  const [placeName, setPlaceName] = useState<string | null>(null);
+  const [emergencyHospitals, setEmergencyHospitals] = useState<HospitalCareInfo[]>([]);
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
 
   // 위치 권한 요청, 실패하면 전주 좌표로 폴백.
   // URL에 ?lat=&lng=가 있으면 GPS보다 우선한다 — 발표장에서 GPS를 켜면 발표장
@@ -57,6 +66,29 @@ export default function Home() {
       { timeout: 5000 }
     );
   }, []);
+
+  // 현재 위치를 "전북대학교"처럼 사람이 읽을 수 있는 이름으로 바꾼다.
+  // 실패하면 placeName이 null로 남고, 화면은 좌표 숫자로 대체해서 계속 정상 동작한다.
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setPlaceName(null);
+    });
+
+    fetch(`/api/reverse-geocode?lat=${userLocation.lat}&lng=${userLocation.lng}`)
+      .then((res) => (res.ok ? res.json() : { label: null }))
+      .then((data) => {
+        if (!cancelled) setPlaceName(data.label ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setPlaceName(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation]);
 
   // 주변 소아과 목록: /api/nearby 우선 시도, 실패하면 목업으로 화면을 계속 채운다
   useEffect(() => {
@@ -115,19 +147,66 @@ export default function Home() {
     };
   }, [userLocation]);
 
+  // "응급실" 필터를 켰을 때만 반경 100km 내 모든 응급실 운영 기관을 따로 불러온다.
+  // 소아과 후보(hospitals)와 출처가 완전히 다른 별도 데이터셋이라 겹치지 않는다.
+  useEffect(() => {
+    if (!userLocation || filter !== 'emergency') return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setEmergencyLoading(true);
+    });
+
+    fetch(`/api/emergency/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radiusKm=20`)
+      .then((res) => (res.ok ? res.json() : { items: [] }))
+      .then((data) => {
+        if (!cancelled) setEmergencyHospitals((data.items ?? []).map(erHospitalToCareInfo));
+      })
+      .catch(() => {
+        if (!cancelled) setEmergencyHospitals([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEmergencyLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation, filter]);
+
   const nearestGeneral = useMemo(() => pickNearestAccepting(hospitals), [hospitals]);
   const nearestSpecialist = useMemo(() => pickNearestSpecialist(hospitals), [hospitals]);
-  const mapHospitals = useMemo(() => filterByCareType(hospitals, filter), [hospitals, filter]);
-  // 목록은 지도 마커와 달리 "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
-  const listHospitals = useMemo(() => sortForList(mapHospitals), [mapHospitals]);
-  const selectedHospital = hospitals.find((h) => h.id === selectedId) ?? null;
+  // "응급실" 필터는 소아과 후보가 아니라 반경 내 전체 응급실 데이터를 쓴다.
+  // 다만 같은 병원이 소아과 후보 목록에도 있으면(예: 진안군의료원) 그쪽의 실측
+  // 소아청소년과 전문의 정보를 가져와 채운다 — 안 그러면 카드/목록에서 같은
+  // 병원의 "전문의 있음/없음" 표시가 서로 어긋난다.
+  const mapHospitals = useMemo(
+    () =>
+      filter === 'emergency'
+        ? enrichErWithPediatricInfo(emergencyHospitals, hospitals)
+        : filterByCareType(hospitals, filter),
+    [hospitals, filter, emergencyHospitals]
+  );
+  // 목록 정렬은 필터마다 다르다.
+  // - 응급실: 이미 병상순으로 와서 그대로 둔다.
+  // - 소아 진료 가능: 전문의 여부와 무관하게 순수 이동시간순.
+  // - 전체/전문의 진료: "전문의 먼저, 그 안에서 시간순"으로 그룹 정렬한다.
+  const listHospitals = useMemo(() => {
+    if (filter === 'emergency') return mapHospitals;
+    if (filter === 'general') return sortByTravelTime(mapHospitals);
+    return sortForList(mapHospitals);
+  }, [mapHospitals, filter]
+  );
+  // selectedId는 필터에 따라 hospitals(소아과 후보) 또는 mapHospitals(응급실
+  // 전체, 소아과 정보 보강됨) 어느 쪽에서 왔을 수 있어서 둘 다 찾아본다.
+  const selectedHospital =
+    hospitals.find((h) => h.id === selectedId) ?? mapHospitals.find((h) => h.id === selectedId) ?? null;
 
   // 길찾기: /api/route 우선 시도, 실패하면 직선 경로로 대체
   const handleDirections = useCallback(
     (id: string) => {
       setSelectedId(id);
       if (!userLocation) return;
-      const hospital = hospitals.find((h) => h.id === id);
+      const hospital = hospitals.find((h) => h.id === id) ?? mapHospitals.find((h) => h.id === id);
       if (!hospital) return;
 
       fetch(
@@ -142,7 +221,7 @@ export default function Home() {
           ]);
         });
     },
-    [userLocation, hospitals]
+    [userLocation, hospitals, mapHospitals]
   );
 
   const handleDetail = useCallback((id: string) => {
@@ -178,10 +257,13 @@ export default function Home() {
       />
 
       <RecommendationPanel
-        locationLabel={loading ? '위치 확인 중...' : `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`}
+        locationLabel={
+          loading
+            ? '위치 확인 중...'
+            : (placeName ?? `현재 위치 (${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)})`)
+        }
         filter={filter}
         onFilterChange={setFilter}
-        nearestGeneral={nearestGeneral}
         nearestSpecialist={nearestSpecialist}
         hospitals={listHospitals}
         selectedId={selectedId}
@@ -191,13 +273,13 @@ export default function Home() {
         onToggleMobile={() => setMobileExpanded((v) => !v)}
       />
 
-      <div className="absolute bottom-6 left-4 z-20 hidden md:block">
+      <div className="absolute bottom-6 right-4 z-20 hidden md:block">
         <CareLegend />
       </div>
 
-      {!loading && notice && (
+      {!loading && (emergencyLoading ? true : !!notice) && (
         <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded-full bg-neutral-900/85 px-4 py-2 text-xs text-white shadow-lg md:bottom-3">
-          {notice}
+          {emergencyLoading ? '반경 20km 내 응급실을 불러오는 중...' : notice}
         </div>
       )}
 

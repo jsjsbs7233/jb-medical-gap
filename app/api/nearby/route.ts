@@ -24,6 +24,7 @@ import type { Clinic, NearbyResponse } from '@/lib/types';
 import demoFixtures from '@/lib/demoFixtures.json';
 
 const SPECIALIST_CANDIDATES = 3; // 거리순 8개 안에 전문의 병원이 없을 수 있어 추가로 확보
+const GENERAL_CANDIDATES = 10; // "소아 진료 가능" 필터 목록이 최소 이 수만큼은 나오도록 확보
 const FALLBACK_KMH = 45; // Tmap이 죽었을 때 직선거리를 시간으로 환산하는 가정 속도
 
 // Supabase가 아직 설정되지 않았을 때를 위한 인메모리 폴백 캐시 (같은 서버 인스턴스 안에서만 유효)
@@ -142,9 +143,6 @@ export async function GET(req: NextRequest) {
     const scored = base
       .map((c) => ({ ...c, distanceKm: haversineKm({ lat, lng }, { lat: c.lat, lng: c.lng }) }))
       .filter((c) => c.distanceKm <= RADIUS_KM)
-      // dgsbjtCd=11로 걸러졌어도 상호가 정형외과·이비인후과 등 소아과와 무관한
-      // 전문과목이면 제외한다 (실제 심평원 데이터에 이런 경우가 섞여 있음)
-      .filter((c) => isRelevantForPediatricCare(c.cl_name ?? '', c.name))
       .sort((a, b) => a.distanceKm - b.distanceKm);
 
     const nearestOverall = scored.slice(0, CANDIDATES);
@@ -153,9 +151,15 @@ export async function GET(req: NextRequest) {
     const nearestSpecialists = scored
       .filter((c) => isLikelyPediatricSpecialistCandidate(c.cl_name ?? '', c.name))
       .slice(0, SPECIALIST_CANDIDATES);
+    // 거리순 8개 중 정형외과·이비인후과 등 소아과와 무관한 곳이 섞여 있으면
+    // "소아 진료 가능" 목록이 8개보다 훨씬 적게 남을 수 있어, 실제로 소아 진료가
+    // 관련 있는 곳만 따로 더 넉넉히 확보한다.
+    const nearestRelevant = scored
+      .filter((c) => isRelevantForPediatricCare(c.cl_name ?? '', c.name))
+      .slice(0, GENERAL_CANDIDATES);
 
     const merged = new Map<string, (typeof scored)[number]>();
-    [...nearestOverall, ...nearestSpecialists].forEach((c) => merged.set(c.id, c));
+    [...nearestOverall, ...nearestSpecialists, ...nearestRelevant].forEach((c) => merged.set(c.id, c));
     const withDistance = Array.from(merged.values());
 
     if (withDistance.length === 0) {
@@ -216,7 +220,19 @@ export async function GET(req: NextRequest) {
     const minutesList = results.map((r) => Math.max(1, Math.round(r.totalTime / 60)));
     const grades = gradeByRank(minutesList);
 
-    const items: Clinic[] = results.map((r, i) => ({
+    const items: Clinic[] = results.map((r, i) => {
+      // 실제 과목별 전문의 수(getDgsbjtInfo2.8)를 확인했으면 그게 정답이고,
+      // 조회 실패(null)했을 때만 상호명/종별 추정 로직으로 대체한다.
+      const hasPediatricSpecialist =
+        r.pediatricSpecialistCount !== null
+          ? r.pediatricSpecialistCount > 0
+          : isPediatricSpecialistInstitution(
+              r.clinic.cl_name ?? '',
+              r.clinic.name,
+              r.clinic.specialist_doctor_count ?? undefined
+            );
+
+      return {
       id: r.clinic.id,
       name: r.clinic.name,
       addr: r.clinic.addr,
@@ -230,21 +246,18 @@ export async function GET(req: NextRequest) {
       delay: r.estimated ? 1 : Math.round(delayRatio(r.totalTime, r.totalDist) * 100) / 100,
       grade: grades[i],
       estimated: r.estimated,
-      // dgsbjtCd=11(소아청소년과)로 이미 걸러진 후보라 전부 소아 진료는 가능하다고 본다.
-      acceptsPediatricPatients: true,
-      // 실제 과목별 전문의 수(getDgsbjtInfo2.8)를 확인했으면 그게 정답이고,
-      // 조회 실패(null)했을 때만 상호명/종별 추정 로직으로 대체한다.
-      hasPediatricSpecialist:
-        r.pediatricSpecialistCount !== null
-          ? r.pediatricSpecialistCount > 0
-          : isPediatricSpecialistInstitution(
-              r.clinic.cl_name ?? '',
-              r.clinic.name,
-              r.clinic.specialist_doctor_count ?? undefined
-            ),
+      // dgsbjtCd=11(소아청소년과)로 걸러진 후보지만, 정형외과·이비인후과 등 상호가
+      // 소아과와 무관한 전문과목이면 이름만으론 "소아 진료 가능"으로 안 본다.
+      // 단, 실제 전문의가 확인됐으면("한나여성의원"처럼 이름은 산부인과 계열이어도
+      // 실측 데이터에 소아청소년과 전문의 1명이 있는 경우) 이름 추정보다 우선한다 —
+      // 전문의가 있는데 "소아 진료 불가"로 나오면 앞뒤가 안 맞는다.
+      acceptsPediatricPatients:
+        isRelevantForPediatricCare(r.clinic.cl_name ?? '', r.clinic.name) || hasPediatricSpecialist,
+      hasPediatricSpecialist,
       specialistDoctorCount: r.clinic.specialist_doctor_count ?? undefined,
       pediatricSpecialistCount: r.pediatricSpecialistCount ?? undefined,
-    }));
+      };
+    });
 
     items.sort((a, b) => a.minutes - b.minutes);
 

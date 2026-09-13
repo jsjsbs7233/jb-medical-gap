@@ -5,20 +5,28 @@ interface Props {
   hospital: HospitalCareInfo;
   onDetail: (id: string) => void;
   onDirections: (id: string) => void;
+  // 응급실 필터일 땐 "전문의 추천"이 아니라 "지금 갈 수 있는 가장 가까운 응급실"을
+  // 보여주므로 배지 문구가 달라진다.
+  title?: string;
 }
 
 /**
- * "가장 가까운 소아 전문진료" — 서비스의 핵심 추천이라 메인 컬러 테두리 +
- * 별 배지로 구분한다. 다만 과하게 화려하지 않게, 흰 배경 + 얇은 강조 테두리 정도로.
+ * 최상단 추천 카드. 기본은 "가장 가까운 소아 전문진료"(서비스의 핵심 추천이라
+ * 메인 컬러 테두리 + 별 배지로 구분) — 응급실 필터일 땐 title을 바꿔서 재사용한다.
  * 이 카드가 뜬 병원이 전북 밖이면, 이 프로젝트의 핵심 메시지("전북 밖이지만
  * 전주보다 빠릅니다")를 배지로 보여준다.
  */
-export default function SpecialistCareCard({ hospital, onDetail, onDirections }: Props) {
+export default function SpecialistCareCard({
+  hospital,
+  onDetail,
+  onDirections,
+  title = '⭐ 가장 가까운 소아 전문진료',
+}: Props) {
   return (
     <div className="rounded-2xl border-2 border-teal-600 bg-white p-4 shadow-sm">
       <div className="flex items-center gap-1.5">
         <span className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-2.5 py-1 text-xs font-semibold text-white">
-          ⭐ 가장 가까운 소아 전문진료
+          {title}
         </span>
       </div>
 
@@ -47,15 +55,17 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
             {hospital.isOpen ? '현재 진료 가능' : '진료 종료'}
           </span>
         )}
-        <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
-          ✓ 소아청소년과 전문의
-        </span>
+        {hospital.hasPediatricSpecialist && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
+            ✓ 소아청소년과 전문의
+          </span>
+        )}
         {hospital.closeTime && (
           <span className="rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-medium text-neutral-500">
             🕙 {hospital.closeTime} 진료 종료
           </span>
         )}
-        {typeof hospital.pediatricSpecialistCount === 'number' ? (
+        {typeof hospital.pediatricSpecialistCount === 'number' && hospital.pediatricSpecialistCount > 0 ? (
           <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-700">
             소아청소년과 전문의 {hospital.pediatricSpecialistCount}명
           </span>
@@ -65,6 +75,11 @@ export default function SpecialistCareCard({ hospital, onDetail, onDirections }:
               병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
             </span>
           )
+        )}
+        {hospital.hasEmergencyRoom && (
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+            🚑 응급실 가용병상 {hospital.erAvailableBeds}
+          </span>
         )}
       </div>
 

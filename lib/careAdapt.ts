@@ -3,7 +3,7 @@
 
 import type { Clinic } from './types';
 import type { HospitalCareInfo } from './careTypes';
-import type { ErBedStatus } from './hiraEmergency';
+import type { ErBedStatus, NearbyErHospital } from './hiraEmergency';
 
 export function clinicToCareInfo(c: Clinic): HospitalCareInfo {
   return {
@@ -21,6 +21,36 @@ export function clinicToCareInfo(c: Clinic): HospitalCareInfo {
     hasPediatricSpecialist: c.hasPediatricSpecialist ?? false,
     specialistDoctorCount: c.specialistDoctorCount,
     pediatricSpecialistCount: c.pediatricSpecialistCount,
+    isNightClinic: false,
+    isHolidayClinic: false,
+    recommendationReason: null,
+  };
+}
+
+/**
+ * 국립중앙의료원 응급실 목록(NearbyErHospital)을 카드/목록이 쓰는 HospitalCareInfo로
+ * 변환한다. 소아과 후보(Clinic)와 출처가 완전히 달라서 소아 진료 관련 필드는 알 수
+ * 없다 — 응급실은 법적으로 소아 응급환자도 봐야 하므로 acceptsPediatricPatients는
+ * true로 두고, "전문의 보유"는 실측 못 했으니 false(추정 안 함)로 둔다.
+ */
+export function erHospitalToCareInfo(h: NearbyErHospital): HospitalCareInfo {
+  const tokens = h.addr?.trim().split(/\s+/) ?? [];
+  return {
+    id: h.id,
+    name: h.name,
+    latitude: h.lat,
+    longitude: h.lng,
+    region: tokens.slice(0, 3).join(' ') || h.sido,
+    address: h.addr ?? '',
+    travelTime: h.minutes,
+    distance: h.distanceKm,
+    grade: 'NORMAL',
+    delay: 1,
+    acceptsPediatricPatients: true,
+    hasPediatricSpecialist: false,
+    hasEmergencyRoom: true,
+    erAvailableBeds: h.erAvailableBeds,
+    erUpdatedAt: h.erUpdatedAt,
     isNightClinic: false,
     isHolidayClinic: false,
     recommendationReason: null,
@@ -55,6 +85,34 @@ export function applyEmergencyInfo(
       hasEmergencyRoom: true,
       erAvailableBeds: match.availableBeds,
       erUpdatedAt: match.updatedAt,
+    };
+  });
+}
+
+/**
+ * 역방향 매칭 — 응급실 목록(erHospitalToCareInfo로 만들어진, hpid 기준이라
+ * 소아 진료 관련 필드를 전부 모르는 상태)에, 이미 심평원으로 확인된 소아과
+ * 후보 목록(pediatricHospitals)이 있으면 병원명으로 찾아서 실측 정보를 채워 넣는다.
+ * 안 그러면 "진안군의료원"처럼 같은 병원인데 카드에선 "전문의 있음", 응급실
+ * 목록에선 "일반의"로 서로 다르게 뜨는 모순이 생긴다.
+ */
+export function enrichErWithPediatricInfo(
+  erHospitals: HospitalCareInfo[],
+  pediatricHospitals: HospitalCareInfo[]
+): HospitalCareInfo[] {
+  if (pediatricHospitals.length === 0) return erHospitals;
+
+  const byName = new Map(pediatricHospitals.map((h) => [normalizeName(h.name), h]));
+
+  return erHospitals.map((h) => {
+    const match = byName.get(normalizeName(h.name));
+    if (!match) return h;
+    return {
+      ...h,
+      acceptsPediatricPatients: match.acceptsPediatricPatients,
+      hasPediatricSpecialist: match.hasPediatricSpecialist,
+      specialistDoctorCount: match.specialistDoctorCount,
+      pediatricSpecialistCount: match.pediatricSpecialistCount,
     };
   });
 }
