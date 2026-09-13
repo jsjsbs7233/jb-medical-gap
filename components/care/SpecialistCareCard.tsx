@@ -36,7 +36,14 @@ export default function SpecialistCareCard({
         </div>
       )}
 
-      <p className="mt-2 text-[15px] font-semibold text-neutral-900">{hospital.name}</p>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <p className="text-[15px] font-semibold text-neutral-900">{hospital.name}</p>
+        {hospital.tel && (
+          <a href={`tel:${hospital.tel}`} className="text-xs text-neutral-400">
+            {hospital.tel}
+          </a>
+        )}
+      </div>
       <p className="text-xs text-neutral-400">{hospital.region}</p>
 
       <div className="mt-2 flex items-center gap-3 text-sm tabular-nums text-neutral-700">
