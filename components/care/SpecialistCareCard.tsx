@@ -8,7 +8,6 @@ interface Props {
   // 응급실 필터일 땐 "전문의 추천"이 아니라 "지금 갈 수 있는 가장 가까운 응급실"을
   // 보여주므로 배지 문구가 달라진다.
   title?: string;
-  openOnly?: boolean; // "지금 진료중만" 토글 — 켜져 있을 때만 진료시간 안내를 보여준다
 }
 
 /**
@@ -22,7 +21,6 @@ export default function SpecialistCareCard({
   onDetail,
   onDirections,
   title = '⭐ 가장 가까운 소아 전문진료',
-  openOnly,
 }: Props) {
   return (
     <div className="rounded-2xl border-2 border-teal-600 bg-white p-4 shadow-sm">
@@ -88,11 +86,6 @@ export default function SpecialistCareCard({
         {hospital.hasEmergencyRoom && (
           <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
             🚑 응급실 가용병상 {hospital.erAvailableBeds}
-          </span>
-        )}
-        {openOnly && hospital.openStatus === 'unknown' && (
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-            📞 전화로 문의해주세요
           </span>
         )}
       </div>

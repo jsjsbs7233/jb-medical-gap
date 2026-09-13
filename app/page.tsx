@@ -20,7 +20,6 @@ import {
   pickNearestSpecialist,
   sortForList,
   sortByTravelTime,
-  filterOpenOnly,
 } from '@/lib/careRecommend';
 import CareMap from '@/components/care/CareMap';
 import CareLegend from '@/components/care/CareLegend';
@@ -40,7 +39,6 @@ export default function Home() {
   const [placeName, setPlaceName] = useState<string | null>(null);
   const [emergencyHospitals, setEmergencyHospitals] = useState<HospitalCareInfo[]>([]);
   const [emergencyLoading, setEmergencyLoading] = useState(false);
-  const [openOnly, setOpenOnly] = useState(false);
 
   // 위치 권한 요청, 실패하면 전주 좌표로 폴백.
   // URL에 ?lat=&lng=가 있으면 GPS보다 우선한다 — 발표장에서 GPS를 켜면 발표장
@@ -175,22 +173,19 @@ export default function Home() {
     };
   }, [userLocation, filter]);
 
-  // "지금 진료중만" 토글 — 확인된 휴진만 뺀다("모름"은 전화 문의 안내로 남긴다).
-  const visibleHospitals = useMemo(() => filterOpenOnly(hospitals, openOnly), [hospitals, openOnly]);
-  const nearestGeneral = useMemo(() => pickNearestAccepting(visibleHospitals), [visibleHospitals]);
-  const nearestSpecialist = useMemo(() => pickNearestSpecialist(visibleHospitals), [visibleHospitals]);
+  const nearestGeneral = useMemo(() => pickNearestAccepting(hospitals), [hospitals]);
+  const nearestSpecialist = useMemo(() => pickNearestSpecialist(hospitals), [hospitals]);
   // "응급실" 필터는 소아과 후보가 아니라 반경 내 전체 응급실 데이터를 쓴다.
   // 다만 같은 병원이 소아과 후보 목록에도 있으면(예: 진안군의료원) 그쪽의 실측
   // 소아청소년과 전문의 정보를 가져와 채운다 — 안 그러면 카드/목록에서 같은
-  // 병원의 "전문의 있음/없음" 표시가 서로 어긋난다. 매칭은 필터링 전 전체
-  // hospitals로 해야 정확하고, 토글은 그 결과에 마지막에 적용한다.
-  const mapHospitals = useMemo(() => {
-    if (filter === 'emergency') {
-      const enriched = enrichErWithPediatricInfo(emergencyHospitals, hospitals);
-      return filterOpenOnly(enriched, openOnly);
-    }
-    return filterByCareType(visibleHospitals, filter);
-  }, [hospitals, visibleHospitals, filter, emergencyHospitals, openOnly]);
+  // 병원의 "전문의 있음/없음" 표시가 서로 어긋난다.
+  const mapHospitals = useMemo(
+    () =>
+      filter === 'emergency'
+        ? enrichErWithPediatricInfo(emergencyHospitals, hospitals)
+        : filterByCareType(hospitals, filter),
+    [hospitals, filter, emergencyHospitals]
+  );
   // 목록 정렬은 필터마다 다르다.
   // - 응급실: 이미 병상순으로 와서 그대로 둔다.
   // - 소아 진료 가능: 전문의 여부와 무관하게 순수 이동시간순.
@@ -269,8 +264,6 @@ export default function Home() {
         }
         filter={filter}
         onFilterChange={setFilter}
-        openOnly={openOnly}
-        onOpenOnlyChange={setOpenOnly}
         nearestSpecialist={nearestSpecialist}
         hospitals={listHospitals}
         selectedId={selectedId}
@@ -297,7 +290,6 @@ export default function Home() {
             onClose={handleClosePopup}
             onDetail={handleDetail}
             onDirections={handleDirections}
-            openOnly={openOnly}
           />
         </div>
       )}

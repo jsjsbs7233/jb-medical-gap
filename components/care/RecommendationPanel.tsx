@@ -1,7 +1,6 @@
 import type { CareFilter, HospitalCareInfo } from '@/lib/careTypes';
 import { summarizeEmergencyBeds } from '@/lib/careRecommend';
 import HospitalFilter from './HospitalFilter';
-import OpenNowToggle from './OpenNowToggle';
 import SpecialistCareCard from './SpecialistCareCard';
 import HospitalListItem from './HospitalListItem';
 
@@ -9,8 +8,6 @@ interface Props {
   locationLabel: string;
   filter: CareFilter;
   onFilterChange: (v: CareFilter) => void;
-  openOnly: boolean;
-  onOpenOnlyChange: (v: boolean) => void;
   nearestSpecialist: HospitalCareInfo | null;
   hospitals: HospitalCareInfo[]; // 주변 병원 전체 목록(필터 적용됨, 이동시간 오름차순)
   selectedId: string | null;
@@ -28,8 +25,6 @@ export default function RecommendationPanel({
   locationLabel,
   filter,
   onFilterChange,
-  openOnly,
-  onOpenOnlyChange,
   nearestSpecialist,
   hospitals,
   selectedId,
@@ -63,10 +58,7 @@ export default function RecommendationPanel({
       <div className="mb-1 flex items-center gap-1.5 text-xs text-neutral-500">
         📍 현재 위치
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-neutral-800">{locationLabel}</p>
-        <OpenNowToggle value={openOnly} onChange={onOpenOnlyChange} />
-      </div>
+      <p className="text-sm font-semibold text-neutral-800">{locationLabel}</p>
 
       <div className="mt-3">
         <HospitalFilter value={filter} onChange={onFilterChange} />
@@ -74,13 +66,7 @@ export default function RecommendationPanel({
 
       <div className="mt-4 flex flex-col gap-3">
         {topPick ? (
-          <SpecialistCareCard
-            hospital={topPick}
-            onDetail={onDetail}
-            onDirections={onDirections}
-            title={topTitle}
-            openOnly={openOnly}
-          />
+          <SpecialistCareCard hospital={topPick} onDetail={onDetail} onDirections={onDirections} title={topTitle} />
         ) : (
           <EmptyNotice text={emptyText} />
         )}
@@ -105,7 +91,6 @@ export default function RecommendationPanel({
                 isSelected={h.id === selectedId}
                 onDetail={onDetail}
                 onDirections={onDirections}
-                openOnly={openOnly}
               />
             ))
           )}

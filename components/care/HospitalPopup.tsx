@@ -8,7 +8,6 @@ interface Props {
   onClose: () => void;
   onDetail: (id: string) => void;
   onDirections: (id: string) => void;
-  openOnly?: boolean; // "지금 진료중만" 토글 — 켜져 있을 때만 진료시간 안내를 보여준다
 }
 
 interface EquipmentItem {
@@ -18,7 +17,7 @@ interface EquipmentItem {
 }
 
 /** 마커 클릭 시 뜨는 floating 정보 팝업. */
-export default function HospitalPopup({ hospital, onClose, onDetail, onDirections, openOnly }: Props) {
+export default function HospitalPopup({ hospital, onClose, onDetail, onDirections }: Props) {
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
 
   // 병원을 선택할 때만(상세 팝업이 열릴 때) 그 병원 1곳의 장비 정보를 가져온다.
@@ -107,11 +106,6 @@ export default function HospitalPopup({ hospital, onClose, onDetail, onDirection
           <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
             🚑 응급실 가용병상 {hospital.erAvailableBeds}
             {hospital.erUpdatedAt ? ` (${hospital.erUpdatedAt.slice(11)} 기준)` : ''}
-          </span>
-        )}
-        {openOnly && hospital.openStatus === 'unknown' && (
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-            📞 전화로 문의해주세요
           </span>
         )}
       </div>

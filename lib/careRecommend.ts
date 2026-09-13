@@ -78,13 +78,3 @@ export function sortForList(hospitals: HospitalCareInfo[]): HospitalCareInfo[] {
 export function sortByTravelTime(hospitals: HospitalCareInfo[]): HospitalCareInfo[] {
   return [...hospitals].sort(byTravelTimeThenDistance);
 }
-
-/**
- * "지금 진료중만" 토글. 확인된 휴진('closed')만 걸러내고, 'unknown'(진료시간
- * 정보 자체가 없는 병원)은 남긴다 — 정보가 없다고 실제로 열려있는 병원을
- * 숨기면 안 되기 때문이다(그 대신 화면에서 "전화로 문의해주세요"로 안내한다).
- */
-export function filterOpenOnly(hospitals: HospitalCareInfo[], openOnly: boolean): HospitalCareInfo[] {
-  if (!openOnly) return hospitals;
-  return hospitals.filter((h) => h.openStatus !== 'closed');
-}
