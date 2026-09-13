@@ -65,7 +65,7 @@ export default function HospitalListItem({ hospital, isSelected, onDetail, onDir
         ) : (
           !!hospital.specialistDoctorCount && (
             <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-500">
-              병원 전체 전문의 {hospital.specialistDoctorCount}명(추정)
+              병원 전체 전문의 {hospital.specialistDoctorCount}명
             </span>
           )
         )}
